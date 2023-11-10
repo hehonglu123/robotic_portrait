@@ -82,8 +82,8 @@ while (shrunken_image==255).any():
         #             img_temp[path_original_size[i][1]+j,path_original_size[i][0]+k]=255
         
         img_display=cv2.bitwise_or(img_display,img_temp)
-        # cv2.imshow("img", cv2.bitwise_not(img_display))
-        # cv2.waitKey(0)
+        cv2.imshow("img", cv2.bitwise_not(img_display))
+        cv2.waitKey(0)
     
 
     img_copy=img_copy-img_temp
