@@ -5,10 +5,7 @@ import glob, cv2
 def main():
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    ipad_pose=np.array([[1,0,0,600],
-                        [0,1,0,0],
-                        [0,0,1,300],
-                        [0,0,0,1]]) 
+    ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
     pixel2mm=0.3
     img_name='me_out'
     image=cv2.imread('imgs/'+img_name+'.png')
