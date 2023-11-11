@@ -38,7 +38,7 @@ def main():
 	num_segments=len(glob.glob('path/cartesian_path/'+img_name+'/*.csv'))
 	robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/pencil.csv')
 	##RR PARAMETERS
-	RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:59925?service=robot')
+	RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
 	RR_robot=RR_robot_sub.GetDefaultClientWait(1)
 	robot_state = RR_robot_sub.SubscribeWire("robot_state")
 	robot_const = RRN.GetConstants("com.robotraconteur.robotics.robot", RR_robot)
@@ -49,8 +49,8 @@ def main():
 	RobotJointCommand = RRN.GetStructureType("com.robotraconteur.robotics.robot.RobotJointCommand",RR_robot)
 	RR_robot.command_mode = halt_mode
 	time.sleep(0.1)
-	RR_robot.reset_errors()
-	time.sleep(0.1)
+	# RR_robot.reset_errors()
+	# time.sleep(0.1)
 
 	RR_robot.command_mode = position_mode
 	cmd_w = RR_robot_sub.SubscribeWire("position_command")

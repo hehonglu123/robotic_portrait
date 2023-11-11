@@ -36,8 +36,8 @@ class AnimeGANv3:
 
 if __name__ == "__main__":
 
-    anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch_25.onnx')
-    img_name='me'
+    anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
+    img_name='jinhan'
     img = cv2.imread('imgs/'+img_name+'.png')
     output = anime.forward(img)
     cv2.imwrite('imgs/'+img_name+'_out.png', output)
