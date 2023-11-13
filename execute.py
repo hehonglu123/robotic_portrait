@@ -8,18 +8,8 @@ sys.path.append('toolbox')
 from robot_def import *
 from vel_emulate_sub import EmulatedVelocityControl
 from lambda_calc import *
+from motion_toolbox import *
 
-def jog_joint(q,v=0.5):
-	global vel_ctrl
-
-	while np.linalg.norm(q-vel_ctrl.joint_position())>0.01:
-		
-		diff=q-vel_ctrl.joint_position()
-		qdot=v*diff/np.linalg.norm(diff)
-
-		vel_ctrl.set_velocity_command(qdot)
-
-	vel_ctrl.set_velocity_command(np.zeros((6,)))
 
 def spline_js(cartesian_path,curve_js,vd,rate=250):
 	lam=calc_lam_cs(cartesian_path)
