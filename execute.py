@@ -26,7 +26,7 @@ def main():
 	img_name='me_out'
 	ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
 	num_segments=len(glob.glob('path/cartesian_path/'+img_name+'/*.csv'))
-	robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/pencil.csv')
+	robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
 	##RR PARAMETERS
 	RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
 	RR_robot=RR_robot_sub.GetDefaultClientWait(1)
@@ -61,7 +61,7 @@ def main():
 			pose_start=robot.fwd(curve_js[0])
 			p_start=pose_start.p+20*ipad_pose[:3,-2]
 			q_start=robot.inv(p_start,pose_start.R,curve_js[0])        
-			jog_joint(q_start)
+			jog_joint(q_start,vel_ctrl)
 
 			#execute path
 			# qdot_d=rate*(curve_js_spline[1]-curve_js_spline[0])
@@ -85,7 +85,7 @@ def main():
 			pose_end=robot.fwd(curve_js[-1])
 			p_end=pose_end.p+20*ipad_pose[:3,-2]
 			q_end=robot.inv(p_end,pose_end.R,curve_js[-1])
-			jog_joint(q_end)
+			jog_joint(q_end,vel_ctrl)
 			
 	vel_ctrl.disable_velocity_mode()
 if __name__ == '__main__':

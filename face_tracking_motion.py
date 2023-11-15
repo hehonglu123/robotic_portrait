@@ -11,13 +11,13 @@ from motion_toolbox import *
 robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/camera.csv')
 radius=500 ###eef position to robot base distance w/o z height
 angle_range=np.array([-3*np.pi/4,-np.pi/4]) ###angle range for robot to move
-height_range=np.array([500,1000]) ###height range for robot to move
+height_range=np.array([500,900]) ###height range for robot to move
 p_start=np.array([0,-radius,700])	###initial position
 R_start=np.array([	[0,1,0],
 					[0,0,-1],
 					[-1,0,0]])	###initial orientation
 q_start=robot.inv(p_start,R_start,np.zeros(6))	###initial joint position
-image_center=np.array([540,540])	###image center
+image_center=np.array([1080,1080])/2	###image center
 
 #########################################################RR PARAMETERS#########################################################
 RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
@@ -87,10 +87,9 @@ while True:
 				q_temp=robot.inv(pose_cur.p+zd*np.array([0,0,z_gain]),pose_cur.R,q_cur)
 			except:
 				continue
-			print(zd,xd)
 			q_temp+=xd*np.array([x_gain,0,0,0,0,0])
 			q_diff=q_temp-q_cur
-			if np.linalg.norm(q_diff)>0.1:
+			if np.linalg.norm(q_diff)>0.3:
 				qdot=q_diff/np.linalg.norm(q_diff)
 			else:
 				qdot=q_diff

@@ -11,7 +11,7 @@ def main():
     image_center=np.array([image.shape[1]/2,image.shape[0]/2])
     num_segments=len(glob.glob('path/cartesian_path/'+img_name+'/*.csv'))
 
-    robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/pencil.csv')
+    robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
 
     R_pencil=np.array([ [-1,0,0],
                         [0,1,0],

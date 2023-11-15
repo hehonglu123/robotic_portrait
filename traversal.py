@@ -23,7 +23,7 @@ img_gray=cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 img_gray=cv2.bitwise_not(img_gray)
 
 img_copy = img_gray.copy()
-pen_radius=5
+pen_radius=4
 # Create a kernel for erosion
 kernel = np.ones((2*pen_radius, 2*pen_radius), np.uint8)
 shrunken_image = cv2.resize(img_copy, (int(img_copy.shape[1]/(2*pen_radius)), int(img_copy.shape[0]/(2*pen_radius))), interpolation = cv2.INTER_NEAREST )
