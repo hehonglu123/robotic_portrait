@@ -34,15 +34,28 @@ class AnimeGANv3:
         output = cv2.cvtColor(output_image, cv2.COLOR_RGB2BGR)
         return output
 
+def brighten_dark_areas(image, alpha=1.2, beta=100):
+    # Apply alpha and beta to the image
+    result = cv2.addWeighted(image, alpha, np.zeros_like(image), 0, beta)
+
+    return result
+
 if __name__ == "__main__":
 
     anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
     img_name='jinhan'
     img = cv2.imread('imgs/'+img_name+'.png')
-    output = anime.forward(img)
+    #convert dark pixels to bright pixels
+    gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    #TODO: Identify dark cloth and convert brighter
+    #display img
+    cv2.imshow("img", brighten_dark_areas(img))
+    cv2.waitKey(0)
+
+    output = anime.forward(gray_image)
     cv2.imwrite('imgs/'+img_name+'_out.png', output)
 
-    gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     # # Apply Gaussian blur to reduce noise
     # gray_image = cv2.GaussianBlur(gray_image, (5, 5), 0)
