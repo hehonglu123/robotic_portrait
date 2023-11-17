@@ -6,7 +6,7 @@ from robot_def import *
 
 def main():
     pixel2mm=0.5
-    img_name='me_out'
+    img_name='glenn_out'
     image=cv2.imread('imgs/'+img_name+'.png')
     image_center=np.array([image.shape[1]/2,image.shape[0]/2])
     num_segments=len(glob.glob('path/cartesian_path/'+img_name+'/*.csv'))

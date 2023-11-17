@@ -5,7 +5,7 @@ import glob, cv2
 def main():
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    img_name='me_out'
+    img_name='glenn_out'
     img_gray=cv2.imread('imgs/'+img_name+'.png',cv2.IMREAD_GRAYSCALE)
     ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
     paper_size=np.loadtxt('config/paper_size.csv',delimiter=',')
@@ -13,7 +13,6 @@ def main():
     #find a ratio to fit image in paper
     pixel2mm=min(paper_size/img_gray.shape)
     pen_radius_pixel=pen_radius/pixel2mm
-    img_name='me_out'
     image=cv2.imread('imgs/'+img_name+'.png')
     image_center=np.array([image.shape[1]/2,image.shape[0]/2])
     num_segments=len(glob.glob('path/pixel_path/'+img_name+'/*.csv'))

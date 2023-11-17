@@ -10,7 +10,7 @@ from vel_emulate_sub import EmulatedVelocityControl
 from lambda_calc import *
 from motion_toolbox import *
 
-def jog_joint_position_cmd(q,v=0.5):
+def jog_joint_position_cmd(q,v=0.5,accurate=False):
 	global RobotJointCommand, cmd_w, command_seqno, robot_state
 
 	faster_rate=10000
@@ -34,23 +34,24 @@ def jog_joint_position_cmd(q,v=0.5):
 		while time.time()-now<1/faster_rate:
 			continue
 	
-	###additional points for accuracy
-	for i in range(int(faster_rate/10)):
-		now=time.time()
-		# Increment command_seqno
-		command_seqno += 1
-		# Create Fill the RobotJointCommand structure
-		joint_cmd = RobotJointCommand()
-		joint_cmd.seqno = command_seqno # Strictly increasing command_seqno
-		joint_cmd.state_seqno = robot_state.InValue.seqno # Send current robot_state.seqno as failsafe
-		
-		# Set the joint command
-		joint_cmd.command = q
+	if accurate:
+		###additional points for accuracy
+		for i in range(int(faster_rate/10)):
+			now=time.time()
+			# Increment command_seqno
+			command_seqno += 1
+			# Create Fill the RobotJointCommand structure
+			joint_cmd = RobotJointCommand()
+			joint_cmd.seqno = command_seqno # Strictly increasing command_seqno
+			joint_cmd.state_seqno = robot_state.InValue.seqno # Send current robot_state.seqno as failsafe
+			
+			# Set the joint command
+			joint_cmd.command = q
 
-		# Send the joint command to the robot
-		cmd_w.SetOutValueAll(joint_cmd)
-		while time.time()-now<1/faster_rate:
-			continue
+			# Send the joint command to the robot
+			cmd_w.SetOutValueAll(joint_cmd)
+			while time.time()-now<1/faster_rate:
+				continue
 
 def trajectory_position_cmd(q_all,v=0.5):
 	global RobotJointCommand, cmd_w, command_seqno, robot_state
@@ -93,7 +94,7 @@ def spline_js(cartesian_path,curve_js,vd,rate=250):
 def main():
 	global  RobotJointCommand, cmd_w, command_seqno, robot_state
 	rate=250
-	img_name='me_out'
+	img_name='glenn_out'
 	ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
 	num_segments=len(glob.glob('path/cartesian_path/'+img_name+'/*.csv'))
 	robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
@@ -127,7 +128,7 @@ def main():
 			p_start=pose_start.p+20*ipad_pose[:3,-2]
 			q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
 			jog_joint_position_cmd(q_start)
-			jog_joint_position_cmd(curve_js[0])
+			jog_joint_position_cmd(curve_js[0],accurate=True)
 			trajectory_position_cmd(curve_js)
 			
 			#jog to end point

@@ -17,7 +17,7 @@ def pixels_in_radius(x, y, pen_radius_pixel, image_shape):
 
 
 ###DFS to traverse connected component
-img_name='me_out'
+img_name='glenn_out'
 img_gray=cv2.imread('imgs/'+img_name+'.png',cv2.IMREAD_GRAYSCALE)
 img_gray=cv2.bitwise_not(img_gray)
 
