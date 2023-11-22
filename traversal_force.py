@@ -17,7 +17,7 @@ def pixels_in_radius(x, y, pen_radius_pixel, image_shape):
 
 
 ###DFS to traverse connected component
-img_name='glenn_out'
+img_name='me_out'
 img_gray=cv2.imread('imgs/'+img_name+'.png',cv2.IMREAD_GRAYSCALE)
 img_gray=cv2.bitwise_not(img_gray)
 
@@ -72,15 +72,15 @@ while (binary_image==255).any():
             img_temp[p[1],p[0]]=255
         
         img_display=cv2.bitwise_or(img_display,img_temp)
-        # cv2.imshow("img", cv2.bitwise_not(img_display))
-        # cv2.waitKey(0)
+        cv2.imshow("img", cv2.bitwise_not(img_display))
+        cv2.waitKey(0)
     
 
     img_copy=img_copy-img_temp
     ret,img_copy=cv2.threshold(img_copy,126,255,cv2.THRESH_BINARY)
 
-    cv2.imshow("img", cv2.bitwise_not(img_copy))
-    cv2.waitKey(0)
+    # cv2.imshow("img", cv2.bitwise_not(img_copy))
+    # cv2.waitKey(0)
 
     path_all.append(path_original_size)
     force_all.append(force)
