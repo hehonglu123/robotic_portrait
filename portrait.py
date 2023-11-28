@@ -43,7 +43,7 @@ def brighten_dark_areas(image, alpha=1.2, beta=100):
 if __name__ == "__main__":
 
     anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
-    img_name='jinhan'
+    img_name='me'
     img = cv2.imread('imgs/'+img_name+'.png')
     #convert dark pixels to bright pixels
     gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
