@@ -5,13 +5,12 @@ sys.path.append('toolbox')
 from robot_def import *
 
 def main():
-    pixel2mm=0.5
-    img_name='glenn_out'
+    img_name='wen_out'
     image=cv2.imread('imgs/'+img_name+'.png')
     image_center=np.array([image.shape[1]/2,image.shape[0]/2])
     num_segments=len(glob.glob('path/cartesian_path/'+img_name+'/*.csv'))
 
-    robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
+    robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen2.csv')
 
     R_pencil=np.array([ [-1,0,0],
                         [0,1,0],

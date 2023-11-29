@@ -17,7 +17,7 @@ def pixels_in_radius(x, y, pen_radius_pixel, image_shape):
 
 
 ###DFS to traverse connected component
-img_name='glenn_out'
+img_name='wen_out'
 img_gray=cv2.imread('imgs/'+img_name+'.png',cv2.IMREAD_GRAYSCALE)
 img_gray=cv2.bitwise_not(img_gray)
 
@@ -102,7 +102,7 @@ count=0
 for path in path_all:
     indices=[]
     for i in range(len(path)-1):
-        if np.linalg.norm(path[i]-path[i+1])>3*pen_radius_pixel:
+        if np.linalg.norm(path[i]-path[i+1])>5*pen_radius_pixel:
             indices.append(i+1)
     #split path
     path_split=np.split(path,indices)
