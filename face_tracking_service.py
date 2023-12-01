@@ -9,14 +9,57 @@ RRN=RR.RobotRaconteurNode.s
 face_tracking_interface="""
 service experimental.face_tracking
 
+import com.robotraconteur.image
+import com.robotraconteur.imaging.camerainfo
+import com.robotraconteur.param
+import com.robotraconteur.device
+import com.robotraconteur.device.isoch
+import com.robotraconteur.device.clock
+import com.robotraconteur.datetime
+
+using com.robotraconteur.image.Image
+
 object face_tracking_obj
 	wire single[] bbox [readonly]
+	wire Image frame_stream [readonly]
 end object
 """
+
+
+
+
+
 class face_tracking_impl(object):
 
+	def __init__(self) -> None:
+		self._image_type = RRN.GetStructureType('com.robotraconteur.image.Image')
 	def update(self,bbox):
 		self.bbox.OutValue=bbox
+	def update_frame(self,mat):
+		self.frame_stream.OutValue=self._cv_mat_to_image(mat)
+	
+	def _cv_mat_to_image(self, mat):
+
+		is_mono = False
+		if (len(mat.shape) == 2 or mat.shape[2] == 1):
+			is_mono = True
+
+		image_info = self._image_info_type()
+		image_info.width =mat.shape[1]
+		image_info.height = mat.shape[0]
+		if is_mono:
+			image_info.step = mat.shape[1]
+			image_info.encoding = self._image_consts["ImageEncoding"]["mono8"]
+		else:
+			image_info.step = mat.shape[1]*3
+			image_info.encoding = self._image_consts["ImageEncoding"]["bgr888"]
+		image_info.data_header = self._sensor_data_util.FillSensorDataHeader(self._camera_info.device_info,self._seqno)
+		
+
+		image = self._image_type()
+		image.image_info = image_info
+		image.data=mat.reshape(mat.size, order='C')
+		return image
 
 class HostSync:
 	def __init__(self):
@@ -84,6 +127,8 @@ def create_pipeline():
 	objectTracker.out.link(tracklets_xout.input)
 	print("Pipeline created.")
 	return pipeline
+
+
 
 with RR.ServerNodeSetup("experimental.face_tracking", 52222):
 	#Register the service type

@@ -124,28 +124,39 @@ def main():
 	RR_robot.command_mode = position_mode
 	cmd_w = RR_robot_sub.SubscribeWire("position_command")
 
-
+	start=True
 	for i in range(num_segments):
 		cartesian_path=np.loadtxt('path/cartesian_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,3))
 		curve_js=np.loadtxt('path/js_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,6))
 		print(i)
 		if len(curve_js)>1:
 
-			#jog to starting point
 			pose_start=robot.fwd(curve_js[0])
-			p_start=pose_start.p+20*ipad_pose[:3,-2]
-			q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
-			jog_joint_position_cmd(q_start)
-			jog_joint_position_cmd(curve_js[0],accurate=True)
+			if start:
+				#jog to starting point
+				p_start=pose_start.p+20*ipad_pose[:3,-2]
+				q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
+				jog_joint_position_cmd(q_start)
+				jog_joint_position_cmd(curve_js[0],accurate=True)
+				start=False
+			else:
+				pose_cur=robot.fwd(robot_state.InValue.joint_position)
+				p_mid=(pose_start.p+pose_cur.p)/2+10*ipad_pose[:3,-2]
+				q_mid=robot.inv(p_mid,pose_start.R,curve_js[0])[0]
+				#arc-like trajectory to next segment
+				trajectory_position_cmd(np.vstack((robot_state.InValue.joint_position,q_mid,curve_js[0])),v=0.1)
+				jog_joint_position_cmd(curve_js[0])
+
+			#drawing trajectory
 			trajectory_position_cmd(curve_js,v=0.1)
-			
-			#jog to end point
-			pose_end=robot.fwd(curve_js[-1])
-			p_end=pose_end.p+20*ipad_pose[:3,-2]
-			q_end=robot.inv(p_end,pose_end.R,curve_js[-1])[0]
-			jog_joint_position_cmd(q_end)
-			time.sleep(1)
-			
+			#jog to end point in case
+			jog_joint_position_cmd(curve_js[-1])
+	
+	#jog to end point
+	pose_end=robot.fwd(curve_js[-1])
+	p_end=pose_end.p+20*ipad_pose[:3,-2]
+	q_end=robot.inv(p_end,pose_end.R,curve_js[-1])[0]
+	jog_joint_position_cmd(q_end)
 
 if __name__ == '__main__':
 	main()
