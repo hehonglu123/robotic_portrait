@@ -27,7 +27,7 @@ def image_traversal(img,paper_size,pen_radius):
     # convolution resize
     shrunken_image = cv2.resize(img_copy, (int(img_copy.shape[1]/(2*pen_radius_pixel)), int(img_copy.shape[0]/(2*pen_radius_pixel))), interpolation = cv2.INTER_LINEAR )
     binary_image=shrunken_image.copy()
-    ret,binary_image=cv2.threshold(binary_image,20,255,cv2.THRESH_BINARY)
+    ret,binary_image=cv2.threshold(binary_image,200,255,cv2.THRESH_BINARY)
     plt.imshow(cv2.bitwise_not(binary_image), cmap='gray')
     plt.show()
 
@@ -70,8 +70,8 @@ def image_traversal(img,paper_size,pen_radius):
                 img_temp[p[1],p[0]]=255
             
             img_display=cv2.bitwise_or(img_display,img_temp)
-            cv2.imshow("img", cv2.bitwise_not(img_display))
-            cv2.waitKey(0)
+            # cv2.imshow("img", cv2.bitwise_not(img_display))
+            # cv2.waitKey(0)
         
 
         img_copy=img_copy-img_temp
@@ -99,11 +99,16 @@ def image_traversal(img,paper_size,pen_radius):
 
     return output_paths
 
-###DFS to traverse connected component
-img_name='wen_out'
-img = cv2.imread('imgs/'+img_name+'.png')
-paper_size=np.loadtxt('config/paper_size.csv',delimiter=',')
-pen_radius=np.loadtxt('config/pen_radius.csv',delimiter=',')
-output_paths=image_traversal(img,paper_size,pen_radius)
-for i in range(len(output_paths)):
-    np.savetxt('path/pixel_path/'+img_name+'/%i.csv'%i, output_paths[i], delimiter=',')
+
+def main():
+     ###DFS to traverse connected component
+    img_name='wen_out'
+    img = cv2.imread('imgs/'+img_name+'.png')
+    paper_size=np.loadtxt('config/paper_size.csv',delimiter=',')
+    pen_radius=np.loadtxt('config/pen_radius.csv',delimiter=',')
+    output_paths=image_traversal(img,paper_size,pen_radius)
+    for i in range(len(output_paths)):
+        np.savetxt('path/pixel_path/'+img_name+'/%i.csv'%i, output_paths[i], delimiter=',')
+
+if __name__ == '__main__':
+   main()

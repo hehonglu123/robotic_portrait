@@ -10,46 +10,40 @@ from vel_emulate_sub import EmulatedVelocityControl
 from lambda_calc import *
 from motion_toolbox import *
 
-def jog_joint_position_cmd(q,v=0.5,accurate=False):
+def position_cmd(q):
 	global RobotJointCommand, cmd_w, command_seqno, robot_state
+
+	# Increment command_seqno
+	command_seqno += 1
+	# Create Fill the RobotJointCommand structure
+	joint_cmd = RobotJointCommand()
+	joint_cmd.seqno = command_seqno # Strictly increasing command_seqno
+	joint_cmd.state_seqno = robot_state.InValue.seqno # Send current robot_state.seqno as failsafe
+	
+	# Set the joint command
+	joint_cmd.command = q
+
+	# Send the joint command to the robot
+	cmd_w.SetOutValueAll(joint_cmd)
+
+def jog_joint_position_cmd(q,v=0.4,wait_time=0):
+	global robot_state
 
 	total_time=np.linalg.norm(q-robot_state.InValue.joint_position)/v
 
 	start_time=time.time()
 	while time.time()-start_time<total_time:
-		# Increment command_seqno
-		command_seqno += 1
-		# Create Fill the RobotJointCommand structure
-		joint_cmd = RobotJointCommand()
-		joint_cmd.seqno = command_seqno # Strictly increasing command_seqno
-		joint_cmd.state_seqno = robot_state.InValue.seqno # Send current robot_state.seqno as failsafe
-		
 		# Set the joint command
 		frac=(time.time()-start_time)/total_time
-		joint_cmd.command = frac*q+(1-frac)*robot_state.InValue.joint_position
+		position_cmd(frac*q+(1-frac)*robot_state.InValue.joint_position)
 	
-		# Send the joint command to the robot
-		cmd_w.SetOutValueAll(joint_cmd)
-	
-	if accurate:
-		###additional points for accuracy
-		start_time=time.time()
-		while time.time()-start_time<1:
-			# Increment command_seqno
-			command_seqno += 1
-			# Create Fill the RobotJointCommand structure
-			joint_cmd = RobotJointCommand()
-			joint_cmd.seqno = command_seqno # Strictly increasing command_seqno
-			joint_cmd.state_seqno = robot_state.InValue.seqno # Send current robot_state.seqno as failsafe
-			
-			# Set the joint command
-			joint_cmd.command = q
-
-			# Send the joint command to the robot
-			cmd_w.SetOutValueAll(joint_cmd)
+	###additional points for accuracy
+	start_time=time.time()
+	while time.time()-start_time<wait_time:
+		position_cmd(q)
 
 
-def trajectory_position_cmd(q_all,v=0.5):
+def trajectory_position_cmd(q_all,v=0.4):
 	global RobotJointCommand, cmd_w, command_seqno, robot_state
 
 
@@ -61,14 +55,6 @@ def trajectory_position_cmd(q_all,v=0.5):
 
 	start_time=time.time()
 	while time.time()-start_time<time_bp[-1]:
-		# now=time.time()
-		# Increment command_seqno
-		command_seqno += 1
-		# Create Fill the RobotJointCommand structure
-		joint_cmd = RobotJointCommand()
-		joint_cmd.seqno = command_seqno # Strictly increasing command_seqno
-		joint_cmd.state_seqno = robot_state.InValue.seqno # Send current robot_state.seqno as failsafe
-		
 
 		#find current segment
 		if time.time()-start_time>time_bp[seg]:
@@ -76,16 +62,7 @@ def trajectory_position_cmd(q_all,v=0.5):
 		if seg==len(q_all):
 			break
 		frac=(time.time()-start_time-time_bp[seg-1])/(time_bp[seg]-time_bp[seg-1])
-
-		# Set the joint command
-		joint_cmd.command = frac*q_all[seg]+(1-frac)*q_all[seg-1]
-
-		# Send the joint command to the robot
-		cmd_w.SetOutValueAll(joint_cmd)
-
-		# print(time.time()-now)
-
-
+		position_cmd(frac*q_all[seg]+(1-frac)*q_all[seg-1])
 		
 
 
@@ -137,7 +114,7 @@ def main():
 				p_start=pose_start.p+20*ipad_pose[:3,-2]
 				q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
 				jog_joint_position_cmd(q_start)
-				jog_joint_position_cmd(curve_js[0],accurate=True)
+				jog_joint_position_cmd(curve_js[0],wait_time=1)
 				start=False
 			else:
 				pose_cur=robot.fwd(robot_state.InValue.joint_position)
@@ -145,12 +122,12 @@ def main():
 				q_mid=robot.inv(p_mid,pose_start.R,curve_js[0])[0]
 				#arc-like trajectory to next segment
 				trajectory_position_cmd(np.vstack((robot_state.InValue.joint_position,q_mid,curve_js[0])),v=0.1)
-				jog_joint_position_cmd(curve_js[0])
+				jog_joint_position_cmd(curve_js[0],wait_time=0.3)
 
 			#drawing trajectory
 			trajectory_position_cmd(curve_js,v=0.1)
 			#jog to end point in case
-			jog_joint_position_cmd(curve_js[-1])
+			jog_joint_position_cmd(curve_js[-1],wait_time=0.3)
 	
 	#jog to end point
 	pose_end=robot.fwd(curve_js[-1])

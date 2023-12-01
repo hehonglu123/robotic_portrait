@@ -2,6 +2,12 @@ import blobconverter
 import cv2
 import depthai as dai
 import numpy as np
+import RobotRaconteurCompanion as RRC
+from RobotRaconteurCompanion.Util.InfoFileLoader import InfoFileLoader
+from RobotRaconteurCompanion.Util.DateTimeUtil import DateTimeUtil
+from RobotRaconteurCompanion.Util.SensorDataUtil import SensorDataUtil
+from RobotRaconteurCompanion.Util.AttributesUtil import AttributesUtil
+
 import RobotRaconteur as RR
 RRN=RR.RobotRaconteurNode.s
 
@@ -33,6 +39,9 @@ class face_tracking_impl(object):
 
 	def __init__(self) -> None:
 		self._image_type = RRN.GetStructureType('com.robotraconteur.image.Image')
+		self._image_info_type = RRN.GetStructureType('com.robotraconteur.image.ImageInfo')
+		self._image_consts = RRN.GetConstants('com.robotraconteur.image')
+		self._sensor_data_util = SensorDataUtil(RRN)
 	def update(self,bbox):
 		self.bbox.OutValue=bbox
 	def update_frame(self,mat):
@@ -53,7 +62,7 @@ class face_tracking_impl(object):
 		else:
 			image_info.step = mat.shape[1]*3
 			image_info.encoding = self._image_consts["ImageEncoding"]["bgr888"]
-		image_info.data_header = self._sensor_data_util.FillSensorDataHeader(self._camera_info.device_info,self._seqno)
+		# image_info.data_header = self._sensor_data_util.FillSensorDataHeader(self._camera_info.device_info,self._seqno)
 		
 
 		image = self._image_type()
@@ -130,6 +139,8 @@ def create_pipeline():
 
 
 
+
+RRC.RegisterStdRobDefServiceTypes(RRN)
 with RR.ServerNodeSetup("experimental.face_tracking", 52222):
 	#Register the service type
 	RRN.RegisterServiceType(face_tracking_interface)
@@ -138,7 +149,8 @@ with RR.ServerNodeSetup("experimental.face_tracking", 52222):
 	
 	#Register the service
 	RRN.RegisterService("Face_tracking","experimental.face_tracking.face_tracking_obj",face_tracking_inst)
-		
+	
+	print('ctrl+c to quit')
 	with dai.Device(create_pipeline()) as device:
 		frame_q = device.getOutputQueue("frame")
 		tracklets_q = device.getOutputQueue("tracklets")
@@ -178,14 +190,14 @@ with RR.ServerNodeSetup("experimental.face_tracking", 52222):
 						continue
 
 					#draw bounding box
-					cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (255, 0, 0), 2)
+					# cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (255, 0, 0), 2)
 					
 					bboxes.append(bbox)
 					bboxes_area.append((bbox[2]-bbox[0])*(bbox[3]-bbox[1]))
 					
 
 
-				cv2.imshow("Frame", cv2.resize(frame, (900,900)))
+				# cv2.imshow("Frame", cv2.resize(frame, (900,900)))
 
 				###find the largest bbox
 				if len(bboxes)>0:
@@ -193,6 +205,7 @@ with RR.ServerNodeSetup("experimental.face_tracking", 52222):
 				else:
 					bbox=[]
 				face_tracking_inst.update(bbox)
+				face_tracking_inst.update_frame(frame)
 
-			if cv2.waitKey(1) == ord('q'):
-				break
+			# if cv2.waitKey(1) == ord('q'):
+			# 	break

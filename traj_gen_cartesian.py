@@ -36,10 +36,12 @@ def main():
     pixel2mm=min(paper_size/img_gray.shape)
     
     cartesian_paths=image2plane(img, ipad_pose, pixel2mm,pixel_paths)
-    for cartesian_path in cartesian_paths:
+    for i in range(len(cartesian_paths)):
 
         ###plot out the path in 3D
-        ax.plot(cartesian_path[:,0], cartesian_path[:,1], cartesian_path[:,2], 'b')
+        ax.plot(cartesian_paths[i][:,0], cartesian_paths[i][:,1], cartesian_paths[i][:,2], 'b')
+        ###save path
+        np.savetxt('path/cartesian_path/'+img_name+'/%i.csv'%i,cartesian_paths[i],delimiter=',')
         
     ax.set_xlabel('X Label')
     ax.set_ylabel('Y Label')
