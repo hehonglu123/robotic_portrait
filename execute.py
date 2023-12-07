@@ -81,9 +81,11 @@ def main():
 	img_name='wen_out'
 	ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
 	num_segments=len(glob.glob('path/cartesian_path/'+img_name+'/*.csv'))
-	robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen2.csv')
+	# robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
+	robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
 	##RR PARAMETERS
-	RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
+	# RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')58655
+	RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
 	RR_robot=RR_robot_sub.GetDefaultClientWait(1)
 	robot_state = RR_robot_sub.SubscribeWire("robot_state")
 	robot_const = RRN.GetConstants("com.robotraconteur.robotics.robot", RR_robot)

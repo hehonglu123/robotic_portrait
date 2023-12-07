@@ -27,12 +27,13 @@ p_all=[]
 
 #Accept the names of the robots from command line
 parser = argparse.ArgumentParser(description="RR plug and play client")
-parser.add_argument("--tool-file",type=str)
+parser.add_argument("--tool-file",type=str,required=True)
+parser.add_argument("--robot-name",type=str,required=True)
 args, _ = parser.parse_known_args()
-robot_name='ABB'
 
+name_dict={'ABB':'ABB_1200_5_90','ur':'ur5'}
 #load robot class
-robot_kin=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/'+args.tool_file+'.csv')
+robot_kin=robot_obj(name_dict[args.robot_name],'config/'+name_dict[args.robot_name]+'_robot_default_config.yml',tool_file_path='config/'+args.tool_file+'.csv')
 	
 
 #auto discovery for robot service
@@ -41,7 +42,7 @@ res=RRN.FindServiceByType("com.robotraconteur.robotics.robot.Robot",
 ["rr+local","rr+tcp","rrs+tcp"])
 url=None
 for serviceinfo2 in res:
-	if robot_name in serviceinfo2.NodeName:
+	if args.robot_name in serviceinfo2.NodeName:
 		url=serviceinfo2.ConnectionURL
 		break
 if url==None:
@@ -53,7 +54,7 @@ res=RRN.FindServiceByType("com.robotraconteur.robotics.tool.Tool",
 ["rr+local","rr+tcp","rrs+tcp"])
 url_gripper=None
 for serviceinfo2 in res:
-	if robot_name in serviceinfo2.NodeName:
+	if args.robot_name in serviceinfo2.NodeName:
 		url_gripper=serviceinfo2.ConnectionURL
 		break
 if url_gripper==None:
@@ -92,7 +93,7 @@ vel_ctrl.enable_velocity_mode()
 
 
 top=Tk()
-top.title(robot_name)
+top.title(args.robot_name)
 jobid = None
 def gripper_ctrl(tool):
 

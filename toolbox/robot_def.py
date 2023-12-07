@@ -215,7 +215,10 @@ class robot_obj(object):
 
 	def inv(self,p,R=np.eye(3),last_joints=None):
 		pose=Transform(R,p)
-		q_all=robot6_sphericalwrist_invkin(self.robot,pose,last_joints)
+		if 'ur' in self.robot_name.lower():
+			q_all=ur_invkin(self.robot,pose,last_joints)
+		else:
+			q_all=robot6_sphericalwrist_invkin(self.robot,pose,last_joints)
 		
 		return q_all
 
