@@ -16,5 +16,9 @@ with open('config/ur5_robot_default_config.yml', 'r') as f:
 tool_H=np.loadtxt('config/heh6_pen_ur.csv',delimiter=',')
 robot.R_tool=tool_H[:3,:3]
 robot.p_tool=tool_H[:3,-1]
-q=ur_invkin(robot,Transform(R,p),q_seed)[0]
+
+q=np.radians([-8,-105.75,93.64,-163,-90,23.7])
 print(fwdkin(robot,q))
+# q=iterative_invkin(robot,Transform(R,p),q_seed)
+# print(np.linalg.cond(robotjacobian(robot,list(q[1][0]))))
+# print(fwdkin(robot,list(q[1][0])))

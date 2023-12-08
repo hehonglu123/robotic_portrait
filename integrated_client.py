@@ -69,20 +69,34 @@ def trajectory_position_cmd(q_all,v=0.4):
 
 
 #########################################################config parameters#########################################################
-robot_cam=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/camera.csv')
-robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen2.csv')
+# robot_cam=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/camera.csv')
+# robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen2.csv')
+# radius=500 ###eef position to robot base distance w/o z height
+# angle_range=np.array([-3*np.pi/4,-np.pi/4]) ###angle range for robot to move
+# height_range=np.array([500,900]) ###height range for robot to move
+# p_start=np.array([0,-radius,700])	###initial position
+# R_start=np.array([	[0,1,0],
+# 					[0,0,-1],
+# 					[-1,0,0]])	###initial orientation
+# q_start=robot_cam.inv(p_start,R_start,np.zeros(6))[0]	###initial joint position
+# image_center=np.array([1080,1080])/2	###image center
+
+#########################################################UR config parameters#########################################################
+robot_cam=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/camera_ur.csv')
+robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/heh6_pen_ur.csv')
 radius=500 ###eef position to robot base distance w/o z height
-angle_range=np.array([-3*np.pi/4,-np.pi/4]) ###angle range for robot to move
+angle_range=np.array([-np.pi/4,np.pi/4]) ###angle range for robot to move
 height_range=np.array([500,900]) ###height range for robot to move
-p_start=np.array([0,-radius,700])	###initial position
-R_start=np.array([	[0,1,0],
-					[0,0,-1],
+p_start=np.array([-radius,0,700])	###initial position
+R_start=np.array([	[0,0,-1],
+					[0,-1,0],
 					[-1,0,0]])	###initial orientation
-q_start=robot_cam.inv(p_start,R_start,np.zeros(6))[0]	###initial joint position
+q_seed=np.radians([0,-54.8,110,-142,-90,0])
+q_start=robot.inv(p_start,R_start,q_seed)[0]	###initial joint position
 image_center=np.array([1080,1080])/2	###image center
 
 #########################################################RR PARAMETERS#########################################################
-RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
+RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
 RR_robot=RR_robot_sub.GetDefaultClientWait(1)
 robot_state = RR_robot_sub.SubscribeWire("robot_state")
 robot_const = RRN.GetConstants("com.robotraconteur.robotics.robot", RR_robot)
@@ -177,7 +191,7 @@ if RR_image[0]:
 	img=RR_image[1]
 	img=np.array(img.data,dtype=np.uint8).reshape((img.image_info.height,img.image_info.width,3))
 	#get the image within the bounding box, a bit larger than the bbox
-	img=img[int(bbox[1]-size[1]/6):int(bbox[3]+size[1]/10),int(bbox[0]-size[0]/10):int(bbox[2]+size[0]/10),:]
+	img=img[int(bbox[1]-size[1]/5):int(bbox[3]+size[1]/8),int(bbox[0]-size[0]/8):int(bbox[2]+size[0]/8),:]
 
 print('IMAGE TAKEN')
 cv2.imwrite('img.jpg',img)
@@ -221,9 +235,7 @@ plt.show()
 
 ###Solve Joint Trajectory
 print("SOLVING JOINT TRAJECTORY")
-R_pencil=np.array([ [-1,0,0],
-					[0,1,0],
-					[0,0,-1]])
+R_pencil=ipad_pose[:3,:3]@Ry(np.pi)
 js_paths=[]
 for cartesian_path in cartesian_paths:
 	curve_js=robot.find_curve_js(cartesian_path,[R_pencil]*len(cartesian_path),np.zeros(6))

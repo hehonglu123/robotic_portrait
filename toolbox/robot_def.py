@@ -216,7 +216,12 @@ class robot_obj(object):
 	def inv(self,p,R=np.eye(3),last_joints=None):
 		pose=Transform(R,p)
 		if 'ur' in self.robot_name.lower():
-			q_all=ur_invkin(self.robot,pose,last_joints)
+			# q_all=ur_invkin(self.robot,pose,last_joints)
+			if last_joints is None:
+				q_all=[np.array(list(iterative_invkin(self.robot,pose,np.radians([0,-54.8,110,-142,-90,0]))[1][0]))]
+			else:
+				q_all=[np.array(list(iterative_invkin(self.robot,pose,last_joints)[1][0]))]
+			# print(q_all)
 		else:
 			q_all=robot6_sphericalwrist_invkin(self.robot,pose,last_joints)
 		

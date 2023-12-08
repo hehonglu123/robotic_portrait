@@ -8,19 +8,34 @@ from lambda_calc import *
 from motion_toolbox import *
 
 #########################################################config parameters#########################################################
-robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/camera.csv')
+# robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/camera.csv')
+# radius=500 ###eef position to robot base distance w/o z height
+# angle_range=np.array([-3*np.pi/4,-np.pi/4]) ###angle range for robot to move
+# height_range=np.array([500,900]) ###height range for robot to move
+# p_start=np.array([0,-radius,700])	###initial position
+# R_start=np.array([	[0,1,0],
+# 					[0,0,-1],
+# 					[-1,0,0]])	###initial orientation
+# q_seed=np.zeros(6)
+# q_start=robot.inv(p_start,R_start,q_seed)	###initial joint position
+# image_center=np.array([1080,1080])/2	###image center
+
+
+#########################################################UR config parameters#########################################################
+robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/camera_ur.csv')
 radius=500 ###eef position to robot base distance w/o z height
-angle_range=np.array([-3*np.pi/4,-np.pi/4]) ###angle range for robot to move
+angle_range=np.array([-np.pi/4,np.pi/4]) ###angle range for robot to move
 height_range=np.array([500,900]) ###height range for robot to move
-p_start=np.array([0,-radius,700])	###initial position
-R_start=np.array([	[0,1,0],
-					[0,0,-1],
+p_start=np.array([-radius,0,700])	###initial position
+R_start=np.array([	[0,0,-1],
+					[0,-1,0],
 					[-1,0,0]])	###initial orientation
-q_start=robot.inv(p_start,R_start,np.zeros(6))	###initial joint position
+q_seed=np.radians([0,-54.8,110,-142,-90,0])
+q_start=robot.inv(p_start,R_start,q_seed)	###initial joint position
 image_center=np.array([1080,1080])/2	###image center
 
 #########################################################RR PARAMETERS#########################################################
-RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
+RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
 RR_robot=RR_robot_sub.GetDefaultClientWait(1)
 robot_state = RR_robot_sub.SubscribeWire("robot_state")
 robot_const = RRN.GetConstants("com.robotraconteur.robotics.robot", RR_robot)
