@@ -82,7 +82,7 @@ def main():
 	ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
 	num_segments=len(glob.glob('path/cartesian_path/'+img_name+'/*.csv'))
 	# robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
-	robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
+	robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/heh6_pen_ur.csv')
 	##RR PARAMETERS
 	# RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')58655
 	RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
@@ -104,7 +104,7 @@ def main():
 	cmd_w = RR_robot_sub.SubscribeWire("position_command")
 
 	start=True
-	for i in range(num_segments):
+	for i in range(1):
 		cartesian_path=np.loadtxt('path/cartesian_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,3))
 		curve_js=np.loadtxt('path/js_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,6))
 		print(i)
@@ -116,6 +116,9 @@ def main():
 				p_start=pose_start.p+20*ipad_pose[:3,-2]
 				q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
 				jog_joint_position_cmd(q_start)
+				# print(robot.fwd(q_start),p_start)
+				print(pose_start.p,cartesian_path[0])
+				time.sleep(10)
 				jog_joint_position_cmd(curve_js[0],wait_time=1)
 				start=False
 			else:

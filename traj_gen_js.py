@@ -14,7 +14,7 @@ def main():
 
     # robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
 
-    robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
+    robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/heh6_pen_ur.csv')
 
     R_pencil=ipad_pose[:3,:3]@Ry(np.pi)
     print(R_pencil)
@@ -25,6 +25,8 @@ def main():
         curve_js=robot.find_curve_js(cartesian_path,[R_pencil]*len(cartesian_path),q_seed)
 
         np.savetxt('path/js_path/'+img_name+'/%i.csv'%i, curve_js, delimiter=',')
+
+        print(cartesian_path[0],robot.fwd(curve_js[0]).p)
         
 if __name__ == '__main__':
     main()
