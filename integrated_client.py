@@ -24,8 +24,13 @@ def position_cmd(q):
 	# Set the joint command
 	joint_cmd.command = q
 
-	# Send the joint command to the robot
-	cmd_w.SetOutValueAll(joint_cmd)
+	try:
+		# Send the joint command to the robot
+		cmd_w.SetOutValueAll(joint_cmd)
+	
+	except:
+		print(joint_cmd.command,q)
+		raise Exception('command failed')
 
 def jog_joint_position_cmd(q,v=0.4,wait_time=0):
 	global robot_state
@@ -163,7 +168,7 @@ while True:
 			xd=center[0]-image_center[0]
 			
 			try:
-				q_temp=robot_cam.inv(pose_cur.p+zd*np.array([0,0,z_gain]),pose_cur.R,q_cur)
+				q_temp=robot_cam.inv(pose_cur.p+zd*np.array([0,0,z_gain]),pose_cur.R,q_cur)[0]
 			except:
 				continue
 			q_temp+=xd*np.array([x_gain,0,0,0,0,0])
@@ -179,7 +184,7 @@ while True:
 			
 			if np.linalg.norm(qdot)<0.1:
 				print(time.time()-start_time)
-				if time.time()-start_time>5:
+				if time.time()-start_time>3:
 					break
 			else:
 				start_time=time.time()
@@ -210,6 +215,7 @@ anime_img = anime.forward(img)
 img_gray=cv2.cvtColor(anime_img, cv2.COLOR_BGR2GRAY)
 pixel2mm=min(paper_size/img_gray.shape)
 
+cv2.imwrite('img_out.jpg',anime_img)
 cv2.imshow("img", anime_img)
 cv2.waitKey(0)
 cv2. destroyAllWindows() 
@@ -238,8 +244,19 @@ print("SOLVING JOINT TRAJECTORY")
 R_pencil=ipad_pose[:3,:3]@Ry(np.pi)
 js_paths=[]
 for cartesian_path in cartesian_paths:
-	curve_js=robot.find_curve_js(cartesian_path,[R_pencil]*len(cartesian_path),np.zeros(6))
+	curve_js=robot.find_curve_js(cartesian_path,[R_pencil]*len(cartesian_path),q_seed)
 	js_paths.append(curve_js)
+
+
+
+print("PAGE FLIPPING")
+q_flip=np.radians([-22.52,-55.87,110.16,-144.75,-89.78,7.48])
+pose=robot.fwd(q_flip)
+q_flip_top=robot.inv(pose.p+30*ipad_pose[:3,-2],pose.R,q_flip)[0]
+jog_joint_position_cmd(q_flip_top,v=0.1)
+jog_joint_position_cmd(q_flip,v=0.1)
+jog_joint_position_cmd(q_flip_top,v=0.1)
+
 
 
 print('START DRAWING')
@@ -262,7 +279,7 @@ for i in range(len(js_paths)):
 			p_mid=(pose_start.p+pose_cur.p)/2+10*ipad_pose[:3,-2]
 			q_mid=robot.inv(p_mid,pose_start.R,curve_js[0])[0]
 			#arc-like trajectory to next segment
-			trajectory_position_cmd(np.vstack((robot_state.InValue.joint_position,q_mid,curve_js[0])),v=0.1)
+			trajectory_position_cmd(np.vstack((robot_state.InValue.joint_position,q_mid,curve_js[0])),v=0.3)
 			jog_joint_position_cmd(curve_js[0],wait_time=0.3)
 
 		#drawing trajectory
