@@ -113,21 +113,21 @@ def main():
 			pose_start=robot.fwd(curve_js[0])
 			if start:
 				#jog to starting point
-				p_start=pose_start.p+20*ipad_pose[:3,-2]
+				p_start=pose_start.p+30*ipad_pose[:3,-2]
 				q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
 				jog_joint_position_cmd(q_start)
 				jog_joint_position_cmd(curve_js[0],wait_time=1)
 				start=False
 			else:
 				pose_cur=robot.fwd(robot_state.InValue.joint_position)
-				p_mid=(pose_start.p+pose_cur.p)/2+10*ipad_pose[:3,-2]
+				p_mid=(pose_start.p+pose_cur.p)/2+20*ipad_pose[:3,-2]
 				q_mid=robot.inv(p_mid,pose_start.R,curve_js[0])[0]
 				#arc-like trajectory to next segment
-				trajectory_position_cmd(np.vstack((robot_state.InValue.joint_position,q_mid,curve_js[0])),v=0.5)
+				trajectory_position_cmd(np.vstack((robot_state.InValue.joint_position,q_mid,curve_js[0])),v=0.2)
 				jog_joint_position_cmd(curve_js[0],wait_time=0.3)
 
 			#drawing trajectory
-			trajectory_position_cmd(curve_js,v=0.1)
+			trajectory_position_cmd(curve_js,v=0.3)
 			#jog to end point in case
 			jog_joint_position_cmd(curve_js[-1],wait_time=0.3)
 	

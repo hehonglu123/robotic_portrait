@@ -28,8 +28,8 @@ def image_traversal(img,paper_size,pen_radius):
     shrunken_image = cv2.resize(img_copy, (int(img_copy.shape[1]/(2*pen_radius_pixel)), int(img_copy.shape[0]/(2*pen_radius_pixel))), interpolation = cv2.INTER_LINEAR )
     binary_image=shrunken_image.copy()
     ret,binary_image=cv2.threshold(binary_image,50,255,cv2.THRESH_BINARY)
-    plt.imshow(cv2.bitwise_not(binary_image), cmap='gray')
-    plt.show()
+    # plt.imshow(cv2.bitwise_not(binary_image), cmap='gray')
+    # plt.show()
 
     img_display=np.zeros(img_gray.shape, dtype="uint8")
     path_all=[]

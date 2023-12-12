@@ -92,12 +92,12 @@ robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='conf
 radius=500 ###eef position to robot base distance w/o z height
 angle_range=np.array([-np.pi/4,np.pi/4]) ###angle range for robot to move
 height_range=np.array([500,900]) ###height range for robot to move
-p_start=np.array([-radius,0,700])	###initial position
-R_start=np.array([	[0,0,-1],
+p_tracking_start=np.array([-radius,0,700])	###initial position
+R_tracking_start=np.array([	[0,0,-1],
 					[0,-1,0],
 					[-1,0,0]])	###initial orientation
 q_seed=np.radians([0,-54.8,110,-142,-90,0])
-q_start=robot.inv(p_start,R_start,q_seed)[0]	###initial joint position
+q_tracking_start=robot.inv(p_tracking_start,R_tracking_start,q_seed)[0]	###initial joint position
 image_center=np.array([1080,1080])/2	###image center
 
 #########################################################RR PARAMETERS#########################################################
@@ -131,164 +131,172 @@ image_wire=face_tracking_sub.SubscribeWire("frame_stream")
 
 face_tracking_sub.ClientConnectFailed += connect_failed
 
-start_time=time.time()
-#jog to initial_position
-jog_joint_position_cmd(q_start,v=0.2,wait_time=0.5)
 
-q_cmd_prev=q_start
+
+
+
+#########################################################EXECUTION#########################################################
 while True:
-	loop_start_time=time.time()
-	wire_packet=bbox_wire.TryGetInValue()
-	q_cur=robot_state.InValue.joint_position
+	start_time=time.time()
+	#jog to initial_position
+	jog_joint_position_cmd(q_tracking_start,v=0.2,wait_time=0.5)
 
-	if wire_packet[0]:
-		bbox=wire_packet[1]
-		if len(bbox)==0: #if no face detected, jog to initial position
-			diff=q_start-q_cur
-			if np.linalg.norm(diff)>0.1:
-				qdot=diff/np.linalg.norm(diff)
+	q_cmd_prev=q_tracking_start
+	while True:
+		loop_start_time=time.time()
+		wire_packet=bbox_wire.TryGetInValue()
+		q_cur=robot_state.InValue.joint_position
+
+		if wire_packet[0]:
+			bbox=wire_packet[1]
+			if len(bbox)==0: #if no face detected, jog to initial position
+				diff=q_tracking_start-q_cur
+				if np.linalg.norm(diff)>0.1:
+					qdot=diff/np.linalg.norm(diff)
+				else:
+					qdot=diff
+				
+				q_cmd=q_cmd_prev+qdot*(time.time()-loop_start_time)
+				position_cmd(q_cmd)
+				q_cmd_prev=copy.deepcopy(q_cmd)
+				
+			else:	#if face detected
+				pose_cur=robot_cam.fwd(q_cur)
+				if q_cur[0]<angle_range[0] or q_cur[0]>angle_range[1] or pose_cur.p[2]<height_range[0] or pose_cur.p[2]>height_range[1]:
+					continue
+				#calculate size of bbox
+				size=np.array([bbox[2]-bbox[0],bbox[3]-bbox[1]])
+				#calculate center of bbox
+				center=np.array([bbox[0]+size[0]/2,bbox[1]+size[1]/2])
+				z_gain=-1
+				x_gain=-1e-3
+				zd=center[1]-image_center[1]
+				xd=center[0]-image_center[0]
+				
+				try:
+					q_temp=robot_cam.inv(pose_cur.p+zd*np.array([0,0,z_gain]),pose_cur.R,q_cur)[0]
+				except:
+					continue
+				q_temp+=xd*np.array([x_gain,0,0,0,0,0])
+				q_diff=q_temp-q_cur
+				if np.linalg.norm(q_diff)>0.8:
+					qdot=0.8*q_diff/np.linalg.norm(q_diff)
+				else:
+					qdot=q_diff
+
+				q_cmd=q_cmd_prev+qdot*(time.time()-loop_start_time)
+				position_cmd(q_cmd)
+				q_cmd_prev=copy.deepcopy(q_cmd)
+				
+				if np.linalg.norm(qdot)<0.1:
+					print(time.time()-start_time)
+					if time.time()-start_time>3:
+						break
+				else:
+					start_time=time.time()
+
+
+
+	RR_image=image_wire.TryGetInValue()
+	if RR_image[0]:
+		img=RR_image[1]
+		img=np.array(img.data,dtype=np.uint8).reshape((img.image_info.height,img.image_info.width,3))
+		#get the image within the bounding box, a bit larger than the bbox
+		img=img[int(bbox[1]-size[1]/5):int(bbox[3]+size[1]/9),int(bbox[0]-size[0]/9):int(bbox[2]+size[0]/9),:]
+
+	print('IMAGE TAKEN')
+	cv2.imwrite('img.jpg',img)
+	# cv2.imshow("img", img)
+	# cv2.waitKey(0)
+	# cv2. destroyAllWindows() 
+
+	###############################################################################PLANNING########################################################################################
+	paper_size=np.loadtxt('config/paper_size.csv',delimiter=',')
+	pen_radius=np.loadtxt('config/pen_radius.csv',delimiter=',')
+	ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
+
+	###portrait GAN
+	anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
+	anime_img = anime.forward(img)
+	img_gray=cv2.cvtColor(anime_img, cv2.COLOR_BGR2GRAY)
+	pixel2mm=min(paper_size/img_gray.shape)
+
+	cv2.imwrite('img_out.jpg',anime_img)
+	# cv2.imshow("img", anime_img)
+	# cv2.waitKey(0)
+	# cv2. destroyAllWindows() 
+
+	###Pixel Traversal
+	print('TRAVERSING PIXELS')
+	pixel_paths=image_traversal(anime_img,paper_size,pen_radius)
+
+
+	###Project to IPAD
+	cartesian_paths=image2plane(anime_img, ipad_pose, pixel2mm,pixel_paths)
+
+	# fig = plt.figure()
+	# ax = fig.add_subplot(111, projection='3d')
+	# for cartesian_path in cartesian_paths:
+	# 	###plot out the path in 3D
+	# 	ax.plot(cartesian_path[:,0], cartesian_path[:,1], cartesian_path[:,2], 'b')
+	# ax.set_xlabel('X Label')
+	# ax.set_ylabel('Y Label')
+	# ax.set_zlabel('Z Label')
+	# plt.show()
+
+	###Solve Joint Trajectory
+	print("SOLVING JOINT TRAJECTORY")
+	R_pencil=ipad_pose[:3,:3]@Ry(np.pi)
+	js_paths=[]
+	for cartesian_path in cartesian_paths:
+		curve_js=robot.find_curve_js(cartesian_path,[R_pencil]*len(cartesian_path),q_seed)
+		js_paths.append(curve_js)
+
+
+
+	print("PAGE FLIPPING")
+	p_flip=np.array([-577.69418679,   59.06883188, -111.31898296])
+	q_flip=robot.inv(p_flip,R_pencil,q_seed)[0]
+	pose=robot.fwd(q_flip)
+	q_flip_top=robot.inv(pose.p+30*ipad_pose[:3,-2],pose.R,q_flip)[0]
+	jog_joint_position_cmd(q_flip_top,v=0.1)
+	jog_joint_position_cmd(q_flip,v=0.1,wait_time=0.2)
+	jog_joint_position_cmd(q_flip_top,v=0.1)
+
+
+
+	print('START DRAWING')
+	###Execute
+	start=True
+	for i in range(len(js_paths)):
+		cartesian_path=cartesian_paths[i]
+		curve_js=js_paths[i]
+		if len(curve_js)>1:
+			pose_start=robot.fwd(curve_js[0])
+			if start:
+				#jog to starting point
+				p_start=pose_start.p+30*ipad_pose[:3,-2]
+				q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
+				jog_joint_position_cmd(q_start,v=0.2)
+				jog_joint_position_cmd(curve_js[0],wait_time=1)
+				start=False
 			else:
-				qdot=diff
-			
-			q_cmd=q_cmd_prev+qdot*(time.time()-loop_start_time)
-			position_cmd(q_cmd)
-			q_cmd_prev=copy.deepcopy(q_cmd)
-			
-		else:	#if face detected
-			pose_cur=robot_cam.fwd(q_cur)
-			if q_cur[0]<angle_range[0] or q_cur[0]>angle_range[1] or pose_cur.p[2]<height_range[0] or pose_cur.p[2]>height_range[1]:
-				continue
-			#calculate size of bbox
-			size=np.array([bbox[2]-bbox[0],bbox[3]-bbox[1]])
-			#calculate center of bbox
-			center=np.array([bbox[0]+size[0]/2,bbox[1]+size[1]/2])
-			z_gain=-1
-			x_gain=-1e-3
-			zd=center[1]-image_center[1]
-			xd=center[0]-image_center[0]
-			
-			try:
-				q_temp=robot_cam.inv(pose_cur.p+zd*np.array([0,0,z_gain]),pose_cur.R,q_cur)[0]
-			except:
-				continue
-			q_temp+=xd*np.array([x_gain,0,0,0,0,0])
-			q_diff=q_temp-q_cur
-			if np.linalg.norm(q_diff)>0.5:
-				qdot=0.5*q_diff/np.linalg.norm(q_diff)
-			else:
-				qdot=q_diff
+				pose_cur=robot.fwd(robot_state.InValue.joint_position)
+				p_mid=(pose_start.p+pose_cur.p)/2+15*ipad_pose[:3,-2]
+				q_mid=robot.inv(p_mid,pose_start.R,curve_js[0])[0]
+				#arc-like trajectory to next segment
+				trajectory_position_cmd(np.vstack((robot_state.InValue.joint_position,q_mid,curve_js[0])),v=0.2)
+				jog_joint_position_cmd(curve_js[0],wait_time=0.1)
 
-			q_cmd=q_cmd_prev+qdot*(time.time()-loop_start_time)
-			position_cmd(q_cmd)
-			q_cmd_prev=copy.deepcopy(q_cmd)
-			
-			if np.linalg.norm(qdot)<0.1:
-				print(time.time()-start_time)
-				if time.time()-start_time>3:
-					break
-			else:
-				start_time=time.time()
+			#drawing trajectory
+			trajectory_position_cmd(curve_js,v=0.15)
+			#jog to end point in case
+			jog_joint_position_cmd(curve_js[-1],wait_time=0.3)
 
+	#jog to end point
+	pose_end=robot.fwd(curve_js[-1])
+	p_end=pose_end.p+30*ipad_pose[:3,-2]
+	q_end=robot.inv(p_end,pose_end.R,curve_js[-1])[0]
+	jog_joint_position_cmd(q_end)
 
-
-RR_image=image_wire.TryGetInValue()
-if RR_image[0]:
-	img=RR_image[1]
-	img=np.array(img.data,dtype=np.uint8).reshape((img.image_info.height,img.image_info.width,3))
-	#get the image within the bounding box, a bit larger than the bbox
-	img=img[int(bbox[1]-size[1]/5):int(bbox[3]+size[1]/8),int(bbox[0]-size[0]/8):int(bbox[2]+size[0]/8),:]
-
-print('IMAGE TAKEN')
-cv2.imwrite('img.jpg',img)
-cv2.imshow("img", img)
-cv2.waitKey(0)
-cv2. destroyAllWindows() 
-
-###############################################################################PLANNING########################################################################################
-paper_size=np.loadtxt('config/paper_size.csv',delimiter=',')
-pen_radius=np.loadtxt('config/pen_radius.csv',delimiter=',')
-ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
-
-###portrait GAN
-anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
-anime_img = anime.forward(img)
-img_gray=cv2.cvtColor(anime_img, cv2.COLOR_BGR2GRAY)
-pixel2mm=min(paper_size/img_gray.shape)
-
-cv2.imwrite('img_out.jpg',anime_img)
-cv2.imshow("img", anime_img)
-cv2.waitKey(0)
-cv2. destroyAllWindows() 
-
-###Pixel Traversal
-print('TRAVERSING PIXELS')
-pixel_paths=image_traversal(anime_img,paper_size,pen_radius)
-
-
-###Project to IPAD
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-
-cartesian_paths=image2plane(anime_img, ipad_pose, pixel2mm,pixel_paths)
-
-for cartesian_path in cartesian_paths:
-	###plot out the path in 3D
-	ax.plot(cartesian_path[:,0], cartesian_path[:,1], cartesian_path[:,2], 'b')
-ax.set_xlabel('X Label')
-ax.set_ylabel('Y Label')
-ax.set_zlabel('Z Label')
-plt.show()
-
-###Solve Joint Trajectory
-print("SOLVING JOINT TRAJECTORY")
-R_pencil=ipad_pose[:3,:3]@Ry(np.pi)
-js_paths=[]
-for cartesian_path in cartesian_paths:
-	curve_js=robot.find_curve_js(cartesian_path,[R_pencil]*len(cartesian_path),q_seed)
-	js_paths.append(curve_js)
-
-
-
-print("PAGE FLIPPING")
-q_flip=np.radians([-22.52,-55.87,110.16,-144.75,-89.78,7.48])
-pose=robot.fwd(q_flip)
-q_flip_top=robot.inv(pose.p+30*ipad_pose[:3,-2],pose.R,q_flip)[0]
-jog_joint_position_cmd(q_flip_top,v=0.1)
-jog_joint_position_cmd(q_flip,v=0.1)
-jog_joint_position_cmd(q_flip_top,v=0.1)
-
-
-
-print('START DRAWING')
-###Execute
-start=True
-for i in range(len(js_paths)):
-	cartesian_path=cartesian_paths[i]
-	curve_js=js_paths[i]
-	if len(curve_js)>1:
-		pose_start=robot.fwd(curve_js[0])
-		if start:
-			#jog to starting point
-			p_start=pose_start.p+20*ipad_pose[:3,-2]
-			q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
-			jog_joint_position_cmd(q_start,v=0.2)
-			jog_joint_position_cmd(curve_js[0],wait_time=1)
-			start=False
-		else:
-			pose_cur=robot.fwd(robot_state.InValue.joint_position)
-			p_mid=(pose_start.p+pose_cur.p)/2+10*ipad_pose[:3,-2]
-			q_mid=robot.inv(p_mid,pose_start.R,curve_js[0])[0]
-			#arc-like trajectory to next segment
-			trajectory_position_cmd(np.vstack((robot_state.InValue.joint_position,q_mid,curve_js[0])),v=0.5)
-			jog_joint_position_cmd(curve_js[0],wait_time=0.3)
-
-		#drawing trajectory
-		trajectory_position_cmd(curve_js,v=0.1)
-		#jog to end point in case
-		jog_joint_position_cmd(curve_js[-1],wait_time=0.3)
-
-#jog to end point
-pose_end=robot.fwd(curve_js[-1])
-p_end=pose_end.p+20*ipad_pose[:3,-2]
-q_end=robot.inv(p_end,pose_end.R,curve_js[-1])[0]
-jog_joint_position_cmd(q_end)
+	print('FINISHED DRAWING')
