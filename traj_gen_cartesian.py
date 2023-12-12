@@ -34,6 +34,7 @@ def main():
     paper_size=np.loadtxt('config/paper_size.csv',delimiter=',')
     img_gray=cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     pixel2mm=min(paper_size/img_gray.shape)
+    print(paper_size,img_gray.shape,pixel2mm)
     
     cartesian_paths=image2plane(img, ipad_pose, pixel2mm,pixel_paths)
     for i in range(len(cartesian_paths)):

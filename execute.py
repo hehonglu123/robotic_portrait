@@ -123,7 +123,7 @@ def main():
 				p_mid=(pose_start.p+pose_cur.p)/2+10*ipad_pose[:3,-2]
 				q_mid=robot.inv(p_mid,pose_start.R,curve_js[0])[0]
 				#arc-like trajectory to next segment
-				trajectory_position_cmd(np.vstack((robot_state.InValue.joint_position,q_mid,curve_js[0])),v=0.1)
+				trajectory_position_cmd(np.vstack((robot_state.InValue.joint_position,q_mid,curve_js[0])),v=0.5)
 				jog_joint_position_cmd(curve_js[0],wait_time=0.3)
 
 			#drawing trajectory
