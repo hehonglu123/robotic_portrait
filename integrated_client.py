@@ -92,7 +92,7 @@ robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='conf
 radius=500 ###eef position to robot base distance w/o z height
 angle_range=np.array([-np.pi/4,np.pi/4]) ###angle range for robot to move
 height_range=np.array([500,900]) ###height range for robot to move
-p_tracking_start=np.array([-radius,0,700])	###initial position
+p_tracking_start=np.array([-radius,0,750])	###initial position
 R_tracking_start=np.array([	[0,0,-1],
 					[0,-1,0],
 					[-1,0,0]])	###initial orientation
