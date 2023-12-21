@@ -50,6 +50,13 @@ def force_prop(force,torque,T):###propagate force from sensor to the tip
 	force_tip=force+np.cross(torque,T)
 	return np.linalg.norm(force_tip)
 
+def get_force_ur(jacobian,torque):
+	gravity_torque=np.array([0,0,0,0,0,0.1])
+	torque_act=torque-gravity_torque
+	return np.linalg.pinv(jacobian)@torque_act
+
+
+
 #########################################################RR PARAMETERS#########################################################
 RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
 RR_robot=RR_robot_sub.GetDefaultClientWait(1)
@@ -97,7 +104,7 @@ for corner in corners:
 	while f_cur<f_d:
 		position_cmd(q_cur+K*(f_d-f_cur)*qdot)
 		q_cur=q_cur+K*qdot
-		f_cur=###get force feedback
+		f_cur=robot.jacobian()@robot_state.InValue.joint_effort			###get force feedback
 	
 	corners_adjusted.append(robot.fwd(q_cur).p)
 
