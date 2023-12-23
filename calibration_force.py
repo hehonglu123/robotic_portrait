@@ -46,8 +46,8 @@ def jog_joint_position_cmd(q,v=0.4,wait_time=0):
 	while time.time()-start_time<wait_time:
 		position_cmd(q)
 
-def force_prop(force,torque,T):###propagate force from sensor to the tip
-	force_tip=force+np.cross(torque,T)
+def force_prop(tf,T):###propagate force from sensor to the tip
+	force_tip=tf[3:]+np.cross(tf[:3],T)
 	return np.linalg.norm(force_tip)
 
 def get_force_ur(jacobian,torque):
@@ -55,6 +55,11 @@ def get_force_ur(jacobian,torque):
 	torque_act=torque-gravity_torque
 	return np.linalg.pinv(jacobian)@torque_act
 
+
+####################################################FT Connection####################################################
+netft=rpi_ati_net_ft.NET_FT('192.168.60.100')
+netft.set_tare_from_ft()
+netft.start_streaming()
 
 
 #########################################################RR PARAMETERS#########################################################
@@ -78,8 +83,8 @@ cmd_w = RR_robot_sub.SubscribeWire("position_command")
 
 
 #########################################################Robot config parameters#########################################################
-# robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
-robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/heh6_pen_ur.csv')
+robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
+# robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/heh6_pen_ur.csv')
 q_seed=np.radians([0,-54.8,110,-142,-90,0])
 
 ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
@@ -97,14 +102,19 @@ for corner in corners:
 	corner_top=corner+20*ipad_pose[:3,-2]
 	q_corner_top=robot.inv(corner_top,R_pencil,q_seed)[0]	###initial joint position
 	jog_joint_position_cmd(q_corner_top,v=0.2)
+
+	netft.set_tare_from_ft()	#clear bias
+
 	qdot=np.linalg.pinv(robot.jacobian(q_corner_top))@np.hstack((np.zeros(3),-ipad_pose[:3,-2]))		#motion direction
-	K=0.5
+	K=0.1
 	q_cur=copy.deepcopy(q_corner_top)
 	f_cur=0
 	while f_cur<f_d:
 		position_cmd(q_cur+K*(f_d-f_cur)*qdot)
 		q_cur=q_cur+K*qdot
-		f_cur=robot.jacobian()@robot_state.InValue.joint_effort			###get force feedback
+		res, tf, status = netft.try_read_ft_streaming(.1)###get force feedback
+		f_cur=force_prop(tf,np.array([55,0,110]))
+		print(f_cur)
 	
 	corners_adjusted.append(robot.fwd(q_cur).p)
 
