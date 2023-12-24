@@ -3,9 +3,15 @@ import matplotlib.pyplot as plt
 import glob, cv2
 
 
-def image2plane(img,ipad_pose,pixel2mm,pixel_paths):
+def image2plane(img,ipad_pose,pixel2mm,pixel_paths,force_gain=0):
+    ###convert image pixel path to cartesian path
+    #img: single channel gray scale image
+    #ipad_pose: 4x4 pose matrix of ipad
+    #pixel2mm: ratio of pixel to mm
+    #pixel_paths: list of pixel paths
+    #force_gain: gain adjust position command according to width ratio
     
-    #find a ratio to fit image in paper
+    ###find a ratio to fit image in paper
     image_center=np.array([img.shape[1]/2,img.shape[0]/2])
     cartesian_paths=[]
     for pixel_path in pixel_paths:
@@ -15,6 +21,13 @@ def image2plane(img,ipad_pose,pixel2mm,pixel_paths):
         #append 0 in z
         cartesian_path=np.hstack((cartesian_path,np.zeros((len(cartesian_path),1))))
         cartesian_path=np.dot(ipad_pose[:3,:3],cartesian_path.T).T+np.tile(ipad_pose[:3,-1],(len(cartesian_path),1))
+
+        #enumerate the path and adjust the force
+        for j in range(len(cartesian_path)):
+            adjustment_mm=(1-pixel_path[j,2])*force_gain
+            adjustment_vec=adjustment_mm*ipad_pose[:3,2]
+            cartesian_path[j]+=adjustment_vec
+
         cartesian_paths.append(cartesian_path)
     
     return cartesian_paths
@@ -36,7 +49,7 @@ def main():
     pixel2mm=min(paper_size/img_gray.shape)
     print(paper_size,img_gray.shape,pixel2mm)
     
-    cartesian_paths=image2plane(img, ipad_pose, pixel2mm,pixel_paths)
+    cartesian_paths=image2plane(img, ipad_pose, pixel2mm,pixel_paths,force_gain=1)
     for i in range(len(cartesian_paths)):
 
         ###plot out the path in 3D

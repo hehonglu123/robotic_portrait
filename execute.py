@@ -77,12 +77,11 @@ def spline_js(cartesian_path,curve_js,vd,rate=250):
 
 def main():
 	global  RobotJointCommand, cmd_w, command_seqno, robot_state
-	rate=250
 	img_name='wen_out'
 	ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
 	num_segments=len(glob.glob('path/cartesian_path/'+img_name+'/*.csv'))
-	# robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
-	robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/heh6_pen_ur.csv')
+	robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
+	# robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/heh6_pen_ur.csv')
 	##RR PARAMETERS
 	# RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')58655
 	RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')

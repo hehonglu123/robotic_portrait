@@ -7,7 +7,7 @@ from sklearn.decomposition import PCA
 sys.path.append('toolbox')
 from robot_def import *
 from utils import *
-
+from rpi_ati_net_ft import *
 
 def position_cmd(q):
 	global RobotJointCommand, cmd_w, command_seqno, robot_state
@@ -57,10 +57,9 @@ def get_force_ur(jacobian,torque):
 
 
 ####################################################FT Connection####################################################
-netft=rpi_ati_net_ft.NET_FT('192.168.60.100')
-netft.set_tare_from_ft()
-netft.start_streaming()
-
+ati_tf=rpi_ati_net_ft.NET_FT('192.168.60.100')
+ati_tf.start_streaming()
+H_pentip2ati=np.loadtxt('config/pentip2ati.csv',delimiter=',')
 
 #########################################################RR PARAMETERS#########################################################
 RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
@@ -97,13 +96,13 @@ corners=np.dot(ipad_pose[:3,:3],corners_offset.T).T+np.tile(ipad_pose[:3,-1],(4,
 
 ###loop four corners to get precise position base on force feedback
 corners_adjusted=[]
-f_d=10#10N push down
+f_d=5	#5N push down
 for corner in corners:
 	corner_top=corner+20*ipad_pose[:3,-2]
 	q_corner_top=robot.inv(corner_top,R_pencil,q_seed)[0]	###initial joint position
 	jog_joint_position_cmd(q_corner_top,v=0.2)
 
-	netft.set_tare_from_ft()	#clear bias
+	ati_tf.set_tare_from_ft()	#clear bias
 
 	qdot=np.linalg.pinv(robot.jacobian(q_corner_top))@np.hstack((np.zeros(3),-ipad_pose[:3,-2]))		#motion direction
 	K=0.1
@@ -112,8 +111,8 @@ for corner in corners:
 	while f_cur<f_d:
 		position_cmd(q_cur+K*(f_d-f_cur)*qdot)
 		q_cur=q_cur+K*qdot
-		res, tf, status = netft.try_read_ft_streaming(.1)###get force feedback
-		f_cur=force_prop(tf,np.array([55,0,110]))
+		res, tf, status = ati_tf.try_read_ft_streaming(.1)###get force feedback
+		f_cur=force_prop(tf,H_pentip2ati[:-1,-1])
 		print(f_cur)
 	
 	corners_adjusted.append(robot.fwd(q_cur).p)
