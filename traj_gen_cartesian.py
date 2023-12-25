@@ -9,7 +9,7 @@ def image2plane(img,ipad_pose,pixel2mm,pixel_paths,force_gain=0):
     #ipad_pose: 4x4 pose matrix of ipad
     #pixel2mm: ratio of pixel to mm
     #pixel_paths: list of pixel paths
-    #force_gain: gain adjust position command according to width ratio
+    #force_gain: gain adjust position command according to width ratio, gain=mm/ratio, 0 means push down, 1 means 1mm up when ratio=0
     
     ###find a ratio to fit image in paper
     image_center=np.array([img.shape[1]/2,img.shape[0]/2])
@@ -49,7 +49,7 @@ def main():
     pixel2mm=min(paper_size/img_gray.shape)
     print(paper_size,img_gray.shape,pixel2mm)
     
-    cartesian_paths=image2plane(img, ipad_pose, pixel2mm,pixel_paths,force_gain=1)
+    cartesian_paths=image2plane(img, ipad_pose, pixel2mm,pixel_paths,force_gain=0.2)
     for i in range(len(cartesian_paths)):
 
         ###plot out the path in 3D

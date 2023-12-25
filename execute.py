@@ -80,11 +80,13 @@ def main():
 	img_name='wen_out'
 	ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
 	num_segments=len(glob.glob('path/cartesian_path/'+img_name+'/*.csv'))
+
 	robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
+	RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
+
 	# robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/heh6_pen_ur.csv')
-	##RR PARAMETERS
-	# RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')58655
-	RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
+	# RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
+	
 	RR_robot=RR_robot_sub.GetDefaultClientWait(1)
 	robot_state = RR_robot_sub.SubscribeWire("robot_state")
 	robot_const = RRN.GetConstants("com.robotraconteur.robotics.robot", RR_robot)
@@ -123,12 +125,12 @@ def main():
 				q_mid=robot.inv(p_mid,pose_start.R,curve_js[0])[0]
 				#arc-like trajectory to next segment
 				trajectory_position_cmd(np.vstack((robot_state.InValue.joint_position,q_mid,curve_js[0])),v=0.2)
-				jog_joint_position_cmd(curve_js[0],wait_time=0.3)
+				jog_joint_position_cmd(curve_js[0],wait_time=1)
 
 			#drawing trajectory
-			trajectory_position_cmd(curve_js,v=0.3)
+			trajectory_position_cmd(curve_js,v=0.1)
 			#jog to end point in case
-			jog_joint_position_cmd(curve_js[-1],wait_time=0.3)
+			jog_joint_position_cmd(curve_js[-1],wait_time=1)
 	
 	#jog to end point
 	pose_end=robot.fwd(curve_js[-1])

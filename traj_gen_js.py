@@ -12,9 +12,9 @@ def main():
     ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
 
 
-    # robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
+    robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
 
-    robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/heh6_pen_ur.csv')
+    # robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/heh6_pen_ur.csv')
 
     R_pencil=ipad_pose[:3,:3]@Ry(np.pi)
     print(R_pencil)

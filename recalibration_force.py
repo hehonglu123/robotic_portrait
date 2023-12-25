@@ -57,12 +57,14 @@ def get_force_ur(jacobian,torque):
 
 
 ####################################################FT Connection####################################################
-ati_tf=rpi_ati_net_ft.NET_FT('192.168.60.100')
+ati_tf=NET_FT('192.168.60.100')
 ati_tf.start_streaming()
 H_pentip2ati=np.loadtxt('config/pentip2ati.csv',delimiter=',')
 
 #########################################################RR PARAMETERS#########################################################
-RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
+RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
+# RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
+
 RR_robot=RR_robot_sub.GetDefaultClientWait(1)
 robot_state = RR_robot_sub.SubscribeWire("robot_state")
 robot_const = RRN.GetConstants("com.robotraconteur.robotics.robot", RR_robot)
@@ -83,29 +85,31 @@ cmd_w = RR_robot_sub.SubscribeWire("position_command")
 
 #########################################################Robot config parameters#########################################################
 robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
+q_seed=np.zeros(6)
+
 # robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/heh6_pen_ur.csv')
-q_seed=np.radians([0,-54.8,110,-142,-90,0])
+# q_seed=np.radians([0,-54.8,110,-142,-90,0])
 
 ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
 paper_size=np.loadtxt('config/paper_size.csv',delimiter=',')
 R_pencil=ipad_pose[:3,:3]@Ry(np.pi)
 
 
-corners_offset=np.array([[-1,1,0],[1,1,0],[1,-1,0],[-1,-1,0]])*1.5*np.array([paper_size[0],paper_size[1],0])/2
+corners_offset=np.array([[-1,1,0],[1,1,0],[1,-1,0],[-1,-1,0]])*1.2*np.array([paper_size[0],paper_size[1],0])/2
 corners=np.dot(ipad_pose[:3,:3],corners_offset.T).T+np.tile(ipad_pose[:3,-1],(4,1))
 
 ###loop four corners to get precise position base on force feedback
 corners_adjusted=[]
-f_d=5	#5N push down
+f_d=10	#10N push down
 for corner in corners:
-	corner_top=corner+20*ipad_pose[:3,-2]
+	corner_top=corner+10*ipad_pose[:3,-2]
 	q_corner_top=robot.inv(corner_top,R_pencil,q_seed)[0]	###initial joint position
-	jog_joint_position_cmd(q_corner_top,v=0.2)
+	jog_joint_position_cmd(q_corner_top,v=0.1)
 
 	ati_tf.set_tare_from_ft()	#clear bias
 
 	qdot=np.linalg.pinv(robot.jacobian(q_corner_top))@np.hstack((np.zeros(3),-ipad_pose[:3,-2]))		#motion direction
-	K=0.1
+	K=0.02
 	q_cur=copy.deepcopy(q_corner_top)
 	f_cur=0
 	while f_cur<f_d:
@@ -116,6 +120,8 @@ for corner in corners:
 		print(f_cur)
 	
 	corners_adjusted.append(robot.fwd(q_cur).p)
+
+	jog_joint_position_cmd(q_corner_top,v=0.1)
 
 
 ###UPDATE IPAD POSE based on new corners
@@ -132,5 +138,5 @@ if R_temp[:,-1]@R_pencil[:,-1]>0:
 
 R_temp[:,1]=np.cross(R_temp[:,2],R_temp[:,0])
 
-np.savetxt('config/ipad_pose_force.csv', H_from_RT(R_temp,center), delimiter=',')
+np.savetxt('config/ipad_pose.csv', H_from_RT(R_temp,center), delimiter=',')
 		
