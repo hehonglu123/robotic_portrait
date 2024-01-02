@@ -1,1 +1,8 @@
 beautifulsoup4
+RobotRaconteurCompanion
+matplotlib
+opencv-python
+tesseract-robotics
+general-robotics-toolbox
+scipy
+onnxruntime
