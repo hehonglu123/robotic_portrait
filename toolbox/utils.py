@@ -12,6 +12,11 @@ def Ry(theta):
 def Rz(theta):
 	return np.array([[np.cos(theta),-np.sin(theta),0],[np.sin(theta),np.cos(theta),0],[0,0,1]])
 
+def force_prop(tf,T):###propagate force from sensor to the tip
+	force_tip=tf[3:]+np.cross(tf[:3],T)
+	return np.linalg.norm(force_tip)
+
+
 def rotate_vector_at_angle(u, v, theta_rad):
     ###rotate u to v at angle theta
     # Compute the unit normal to the plane defined by u and v

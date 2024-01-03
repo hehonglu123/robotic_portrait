@@ -46,9 +46,7 @@ def jog_joint_position_cmd(q,v=0.4,wait_time=0):
 	while time.time()-start_time<wait_time:
 		position_cmd(q)
 
-def force_prop(tf,T):###propagate force from sensor to the tip
-	force_tip=tf[3:]+np.cross(tf[:3],T)
-	return np.linalg.norm(force_tip)
+
 
 def get_force_ur(jacobian,torque):
 	gravity_torque=np.array([0,0,0,0,0,0.1])
