@@ -49,7 +49,8 @@ def main():
     pixel2mm=min(paper_size/img_gray.shape)
     print(paper_size,img_gray.shape,pixel2mm)
     
-    cartesian_paths=image2plane(img, ipad_pose, pixel2mm,pixel_paths,force_gain=0.2)
+    # cartesian_paths=image2plane(img, ipad_pose, pixel2mm,pixel_paths,force_gain=0.2)
+    cartesian_paths=image2plane(img, ipad_pose, pixel2mm,pixel_paths,force_gain=0.0)
     for i in range(len(cartesian_paths)):
 
         ###plot out the path in 3D

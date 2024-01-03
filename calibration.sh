@@ -1,0 +1,1 @@
+python3 calibration_gui.py --tool-file=heh6_pen --robot-name=ABB

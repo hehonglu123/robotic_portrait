@@ -35,14 +35,15 @@ def position_cmd(q):
 def jog_joint_position_cmd(q,v=0.4,wait_time=0):
 	global robot_state
 
-	total_time=np.linalg.norm(q-robot_state.InValue.joint_position)/v
+	q_start=robot_state.InValue.joint_position
+	total_time=np.linalg.norm(q-q_start)/v
 
 	start_time=time.time()
 	while time.time()-start_time<total_time:
 		# Set the joint command
 		frac=(time.time()-start_time)/total_time
-		position_cmd(frac*q+(1-frac)*robot_state.InValue.joint_position)
-	
+		position_cmd(frac*q+(1-frac)*q_start)
+		
 	###additional points for accuracy
 	start_time=time.time()
 	while time.time()-start_time<wait_time:

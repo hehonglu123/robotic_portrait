@@ -33,19 +33,19 @@ def position_cmd(q):
 def jog_joint_position_cmd(q,v=0.4,wait_time=0):
 	global robot_state
 
-	total_time=np.linalg.norm(q-robot_state.InValue.joint_position)/v
+	q_start=robot_state.InValue.joint_position
+	total_time=np.linalg.norm(q-q_start)/v
 
 	start_time=time.time()
 	while time.time()-start_time<total_time:
 		# Set the joint command
 		frac=(time.time()-start_time)/total_time
-		position_cmd(frac*q+(1-frac)*robot_state.InValue.joint_position)
-	
+		position_cmd(frac*q+(1-frac)*q_start)
+		
 	###additional points for accuracy
 	start_time=time.time()
 	while time.time()-start_time<wait_time:
 		position_cmd(q)
-
 
 
 def get_force_ur(jacobian,torque):
@@ -100,7 +100,7 @@ corners=np.dot(ipad_pose[:3,:3],corners_offset.T).T+np.tile(ipad_pose[:3,-1],(4,
 corners_adjusted=[]
 f_d=10	#10N push down
 for corner in corners:
-	corner_top=corner+10*ipad_pose[:3,-2]
+	corner_top=corner+30*ipad_pose[:3,-2]
 	q_corner_top=robot.inv(corner_top,R_pencil,q_seed)[0]	###initial joint position
 	jog_joint_position_cmd(q_corner_top,v=0.1)
 
