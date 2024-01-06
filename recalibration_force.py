@@ -102,7 +102,7 @@ f_d=10	#10N push down
 for corner in corners:
 	corner_top=corner+30*ipad_pose[:3,-2]
 	q_corner_top=robot.inv(corner_top,R_pencil,q_seed)[0]	###initial joint position
-	jog_joint_position_cmd(q_corner_top,v=0.1)
+	jog_joint_position_cmd(q_corner_top,v=0.2)
 
 	ati_tf.set_tare_from_ft()	#clear bias
 
@@ -119,7 +119,7 @@ for corner in corners:
 	
 	corners_adjusted.append(robot.fwd(q_cur).p)
 
-	jog_joint_position_cmd(q_corner_top,v=0.1)
+	jog_joint_position_cmd(q_corner_top,v=0.2)
 
 
 ###UPDATE IPAD POSE based on new corners
