@@ -138,7 +138,7 @@ def main():
 				trajectory_position_cmd(np.vstack((robot_state.InValue.joint_position,q_mid,curve_js[0])),v=0.2)
 				jog_joint_position_cmd(curve_js[0],wait_time=0.3)
 
-			traversal_velocity=10	#mm/s
+			traversal_velocity=50	#mm/s
 			###force feedback drawing trajectory interp
 			
 			# lamq_bp=[0]
@@ -171,21 +171,28 @@ def main():
 
 			###force feedback, traj tracking QP
 			pose_cur=robot.fwd(robot_state.InValue.joint_position)
+			q_cmd=curve_js[0]
 			ts=time.time()
 			for m in range(1,len(curve_js)):
 				# v_d=cartesian_path[m]-cartesian_path[m-1]
 				# v_d=v_d/np.linalg.norm(v_d)
 				f_d=F_MAX*pixel_path[m,-1]
-				while np.linalg.norm(pose_cur.p[:2]-cartesian_path[m,:2])>1:	###loop to get to waypoint
+				while np.linalg.norm(pose_cur.p[:2]-cartesian_path[m,:2])>2:	###loop to get to waypoint
 					v_d=cartesian_path[m]-pose_cur.p
-					v_d=traversal_velocity*v_d/np.linalg.norm(v_d)
+					if np.linalg.norm(v_d)>2.5:
+						v_d=traversal_velocity*v_d/np.linalg.norm(v_d)
+					# print('v_d: ',v_d)
 					#force feedback
 					res, tf, status = ati_tf.try_read_ft_streaming(.1)###get force feedback
 					f_cur=force_prop(tf,H_pentip2ati[:-1,-1])
-					position_gain=0.01
+					print(f_cur)
+					# position_gain=0.01
+					position_gain=0.0
 					v_d+=position_gain*(f_d-f_cur)*(-ipad_pose[:3,-2])
 					p_inc=(time.time()-ts)*v_d	###discrete increments in dt
-					q_cmd=np.linalg.pinv(robot.jacobian(robot_state.InValue.joint_position))@np.hstack((np.zeros(3),p_inc))
+					# print('p_inc: ',p_inc)
+					dq=np.linalg.pinv(robot.jacobian(robot_state.InValue.joint_position))@np.hstack((np.zeros(3),p_inc))
+					q_cmd+=dq
 					position_cmd(q_cmd)
 
 					pose_cur=robot.fwd(robot_state.InValue.joint_position)

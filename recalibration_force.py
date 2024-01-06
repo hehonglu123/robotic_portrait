@@ -98,9 +98,9 @@ corners=np.dot(ipad_pose[:3,:3],corners_offset.T).T+np.tile(ipad_pose[:3,-1],(4,
 
 ###loop four corners to get precise position base on force feedback
 corners_adjusted=[]
-f_d=10	#10N push down
+f_d=5	#10N push down
 for corner in corners:
-	corner_top=corner+30*ipad_pose[:3,-2]
+	corner_top=corner+20*ipad_pose[:3,-2]
 	q_corner_top=robot.inv(corner_top,R_pencil,q_seed)[0]	###initial joint position
 	jog_joint_position_cmd(q_corner_top,v=0.2)
 
