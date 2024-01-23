@@ -9,6 +9,8 @@ from robot_def import *
 from vel_emulate_sub import EmulatedVelocityControl
 from lambda_calc import *
 from motion_toolbox import *
+from rpi_ati_net_ft import *
+
 
 def position_cmd(q):
 	global RobotJointCommand, cmd_w, command_seqno, robot_state
@@ -42,6 +44,7 @@ def jog_joint_position_cmd(q,v=0.4,wait_time=0):
 	start_time=time.time()
 	while time.time()-start_time<wait_time:
 		position_cmd(q)
+
 
 
 def trajectory_position_cmd(q_all,v=0.4):
@@ -78,17 +81,21 @@ def spline_js(cartesian_path,curve_js,vd,rate=250):
 
 def main():
 	global  RobotJointCommand, cmd_w, command_seqno, robot_state
-	# img_name='wen_out'
-	img_name='strokes_out'
+	img_name='wen_out'
 	ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
 	num_segments=len(glob.glob('path/cartesian_path/'+img_name+'/*.csv'))
-
 	robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
-	RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
-
 	# robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/heh6_pen_ur.csv')
+
+	####################################################FT Connection####################################################
+	ati_tf=NET_FT('192.168.60.100')
+	ati_tf.start_streaming()
+	H_pentip2ati=np.loadtxt('config/pentip2ati.csv',delimiter=',')
+	F_MAX=0	#maximum pushing force 10N
+
+	##RR PARAMETERS
+	RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
 	# RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
-	
 	RR_robot=RR_robot_sub.GetDefaultClientWait(1)
 	robot_state = RR_robot_sub.SubscribeWire("robot_state")
 	robot_const = RRN.GetConstants("com.robotraconteur.robotics.robot", RR_robot)
@@ -108,6 +115,7 @@ def main():
 
 	start=True
 	for i in range(num_segments):
+		pixel_path=np.loadtxt('path/pixel_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,3))
 		cartesian_path=np.loadtxt('path/cartesian_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,3))
 		curve_js=np.loadtxt('path/js_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,6))
 		print(i)
@@ -120,6 +128,7 @@ def main():
 				q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
 				jog_joint_position_cmd(q_start)
 				jog_joint_position_cmd(curve_js[0],wait_time=1)
+				ati_tf.set_tare_from_ft()	#clear bias
 				start=False
 			else:
 				pose_cur=robot.fwd(robot_state.InValue.joint_position)
@@ -127,12 +136,71 @@ def main():
 				q_mid=robot.inv(p_mid,pose_start.R,curve_js[0])[0]
 				#arc-like trajectory to next segment
 				trajectory_position_cmd(np.vstack((robot_state.InValue.joint_position,q_mid,curve_js[0])),v=0.2)
-				jog_joint_position_cmd(curve_js[0],wait_time=1)
+				jog_joint_position_cmd(curve_js[0],wait_time=0.3)
 
-			#drawing trajectory
-			trajectory_position_cmd(curve_js,v=0.1)
-			#jog to end point in case
-			jog_joint_position_cmd(curve_js[-1],wait_time=1)
+			traversal_velocity=50	#mm/s
+			###force feedback drawing trajectory interp
+			
+			# lamq_bp=[0]
+			# for m in range(len(curve_js)-1):
+			# 	lamq_bp.append(lamq_bp[-1]+np.linalg.norm(curve_js[m+1]-curve_js[m]))
+			# time_bp=np.array(lamq_bp)/v
+			# seg=1
+			# start_time=time.time()
+			# while time.time()-start_time<time_bp[-1]:
+
+			# 	#find current segment, give command based on timestamped segments
+			# 	if time.time()-start_time>time_bp[seg]:
+			# 		seg+=1
+			# 	if seg==len(curve_js):
+			# 		break
+			# 	frac=(time.time()-start_time-time_bp[seg-1])/(time_bp[seg]-time_bp[seg-1])
+			# 	#interpolated js position
+			# 	q_d=frac*curve_js[seg]+(1-frac)*curve_js[seg-1]
+			# 	#interpolated force
+			# 	f_d=F_MAX*(frac*pixel_path[seg,-1]+(1-frac)*pixel_path[seg-1,-1])
+			# 	#force feedback
+			# 	res, tf, status = ati_tf.try_read_ft_streaming(.1)###get force feedback
+			# 	f_cur=force_prop(tf,H_pentip2ati[:-1,-1])
+			# 	position_gain=0.05
+			# 	normal_adjustment=position_gain*(f_d-f_cur)
+			# 	q_cmd=q_d+normal_adjustment*np.linalg.pinv(robot.jacobian(q_d))@np.hstack((np.zeros(3),-ipad_pose[:3,-2]))
+
+			# 	position_cmd(q_cmd)
+			# 	print(normal_adjustment,f_cur)
+
+			###force feedback, traj tracking QP
+			pose_cur=robot.fwd(robot_state.InValue.joint_position)
+			q_cmd=curve_js[0]
+			ts=time.time()
+			for m in range(1,len(curve_js)):
+				# v_d=cartesian_path[m]-cartesian_path[m-1]
+				# v_d=v_d/np.linalg.norm(v_d)
+				f_d=F_MAX*pixel_path[m,-1]
+				while np.linalg.norm(pose_cur.p[:2]-cartesian_path[m,:2])>2:	###loop to get to waypoint
+					v_d=cartesian_path[m]-pose_cur.p
+					if np.linalg.norm(v_d)>2.5:
+						v_d=traversal_velocity*v_d/np.linalg.norm(v_d)
+					# print('v_d: ',v_d)
+					#force feedback
+					res, tf, status = ati_tf.try_read_ft_streaming(.1)###get force feedback
+					f_cur=force_prop(tf,H_pentip2ati[:-1,-1])
+					print(f_cur)
+					# position_gain=0.01
+					position_gain=0.0
+					v_d+=position_gain*(f_d-f_cur)*(-ipad_pose[:3,-2])
+					p_inc=(time.time()-ts)*v_d	###discrete increments in dt
+					# print('p_inc: ',p_inc)
+					dq=np.linalg.pinv(robot.jacobian(robot_state.InValue.joint_position))@np.hstack((np.zeros(3),p_inc))
+					q_cmd+=dq
+					position_cmd(q_cmd)
+
+					pose_cur=robot.fwd(robot_state.InValue.joint_position)
+					ts=time.time()
+
+				
+			#jog to end point
+			jog_joint_position_cmd(curve_js[-1],wait_time=0.3)
 	
 	#jog to end point
 	pose_end=robot.fwd(curve_js[-1])

@@ -1,11 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from pathlib import Path
 import glob, cv2, sys
 sys.path.append('toolbox')
 from robot_def import *
 
 def main():
-    img_name='wen_out'
+    # img_name='wen_out'
+    img_name='strokes_out'
     image=cv2.imread('imgs/'+img_name+'.png')
     image_center=np.array([image.shape[1]/2,image.shape[0]/2])
     num_segments=len(glob.glob('path/cartesian_path/'+img_name+'/*.csv'))
@@ -24,6 +26,7 @@ def main():
         q_seed=np.radians([0,-54.8,110,-142,-90,0]) if 'ur' in robot.robot_name.lower() else np.zeros(6)
         curve_js=robot.find_curve_js(cartesian_path,[R_pencil]*len(cartesian_path),q_seed)
 
+        Path('path/js_path/'+img_name).mkdir(parents=True, exist_ok=True)
         np.savetxt('path/js_path/'+img_name+'/%i.csv'%i, curve_js, delimiter=',')
 
         print(cartesian_path[0],robot.fwd(curve_js[0]).p)

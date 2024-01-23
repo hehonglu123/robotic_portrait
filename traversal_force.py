@@ -1,5 +1,6 @@
 import cv2, sys
 import numpy as np
+from pathlib import Path
 sys.setrecursionlimit(10**6)
 
 from matplotlib import pyplot as plt
@@ -18,6 +19,8 @@ def pixels_in_radius(x, y, pen_radius_pixel, image_shape):
 def image_traversal(img,paper_size,pen_radius):
     img_gray=cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     img_gray=cv2.bitwise_not(img_gray)
+    # plt.imshow(cv2.bitwise_not(img_gray), cmap='gray')
+    # plt.show()
 
     img_copy = img_gray.copy()
     #find a ratio to fit image in paper
@@ -28,6 +31,7 @@ def image_traversal(img,paper_size,pen_radius):
     shrunken_image = cv2.resize(img_copy, (int(img_copy.shape[1]/(2*pen_radius_pixel)), int(img_copy.shape[0]/(2*pen_radius_pixel))), interpolation = cv2.INTER_LINEAR )
     binary_image=shrunken_image.copy()
     ret,binary_image=cv2.threshold(binary_image,50,255,cv2.THRESH_BINARY)
+    
     # plt.imshow(cv2.bitwise_not(binary_image), cmap='gray')
     # plt.show()
 
@@ -102,11 +106,13 @@ def image_traversal(img,paper_size,pen_radius):
 
 def main():
      ###DFS to traverse connected component
-    img_name='wen_out'
+    # img_name='wen_out'
+    img_name='strokes_out'
     img = cv2.imread('imgs/'+img_name+'.png')
     paper_size=np.loadtxt('config/paper_size.csv',delimiter=',')
     pen_radius=np.loadtxt('config/pen_radius.csv',delimiter=',')
     output_paths=image_traversal(img,paper_size,pen_radius)
+    Path('path/pixel_path/'+img_name).mkdir(parents=True, exist_ok=True)
     for i in range(len(output_paths)):
         np.savetxt('path/pixel_path/'+img_name+'/%i.csv'%i, output_paths[i], delimiter=',')
 

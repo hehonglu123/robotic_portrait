@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import glob, cv2
-
+from pathlib import Path
 
 def image2plane(img,ipad_pose,pixel2mm,pixel_paths,force_gain=0):
     ###convert image pixel path to cartesian path
@@ -33,7 +33,8 @@ def image2plane(img,ipad_pose,pixel2mm,pixel_paths,force_gain=0):
     return cartesian_paths
 
 def main():
-    img_name='wen_out'
+    # img_name='wen_out'
+    img_name='strokes_out'
     num_segments=len(glob.glob('path/pixel_path/'+img_name+'/*.csv'))
     pixel_paths=[]
     for i in range(num_segments):
@@ -56,6 +57,7 @@ def main():
         ###plot out the path in 3D
         ax.plot(cartesian_paths[i][:,0], cartesian_paths[i][:,1], cartesian_paths[i][:,2], 'b')
         ###save path
+        Path('path/cartesian_path/'+img_name).mkdir(parents=True, exist_ok=True)
         np.savetxt('path/cartesian_path/'+img_name+'/%i.csv'%i,cartesian_paths[i],delimiter=',')
         
     ax.set_xlabel('X Label')
