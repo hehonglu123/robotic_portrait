@@ -10,66 +10,7 @@ from vel_emulate_sub import EmulatedVelocityControl
 from lambda_calc import *
 from motion_toolbox import *
 from rpi_ati_net_ft import *
-
-
-def position_cmd(q):
-	global RobotJointCommand, cmd_w, command_seqno, robot_state
-
-	# Increment command_seqno
-	command_seqno += 1
-	# Create Fill the RobotJointCommand structure
-	joint_cmd = RobotJointCommand()
-	joint_cmd.seqno = command_seqno # Strictly increasing command_seqno
-	joint_cmd.state_seqno = robot_state.InValue.seqno # Send current robot_state.seqno as failsafe
-	
-	# Set the joint command
-	joint_cmd.command = q
-
-	# Send the joint command to the robot
-	cmd_w.SetOutValueAll(joint_cmd)
-
-def jog_joint_position_cmd(q,v=0.4,wait_time=0):
-	global robot_state
-
-	q_start=robot_state.InValue.joint_position
-	total_time=np.linalg.norm(q-q_start)/v
-
-	start_time=time.time()
-	while time.time()-start_time<total_time:
-		# Set the joint command
-		frac=(time.time()-start_time)/total_time
-		position_cmd(frac*q+(1-frac)*q_start)
 		
-	###additional points for accuracy
-	start_time=time.time()
-	while time.time()-start_time<wait_time:
-		position_cmd(q)
-
-
-
-def trajectory_position_cmd(q_all,v=0.4):
-	global RobotJointCommand, cmd_w, command_seqno, robot_state
-
-
-	lamq_bp=[0]
-	for i in range(len(q_all)-1):
-		lamq_bp.append(lamq_bp[-1]+np.linalg.norm(q_all[i+1]-q_all[i]))
-	time_bp=np.array(lamq_bp)/v
-	seg=1
-
-	start_time=time.time()
-	while time.time()-start_time<time_bp[-1]:
-
-		#find current segment
-		if time.time()-start_time>time_bp[seg]:
-			seg+=1
-		if seg==len(q_all):
-			break
-		frac=(time.time()-start_time-time_bp[seg-1])/(time_bp[seg]-time_bp[seg-1])
-		position_cmd(frac*q_all[seg]+(1-frac)*q_all[seg-1])
-		
-
-
 def spline_js(cartesian_path,curve_js,vd,rate=250):
 	lam=calc_lam_cs(cartesian_path)
 	# polyfit=np.polyfit(lam,curve_js,deg=40)
@@ -79,39 +20,113 @@ def spline_js(cartesian_path,curve_js,vd,rate=250):
 	lam=np.linspace(0,lam[-1],int(rate*lam[-1]/vd))
 	return polyfit(lam)
 
+class MotionController(object):
+	def __init__(self,robot,ipad_pose,H_pentip2ati):
+		self.robot=robot
+		self.ipad_pose=ipad_pose
+		self.H_pentip2ati=H_pentip2ati
+		self.H_ati2pentip=np.linalg.inv(H_pentip2ati)
+
+		####################################################FT Connection####################################################
+		RR_ati_cli=RRN.ConnectService('rr+tcp://localhost:59823?service=ati_sensor')
+		#Connect a wire connection
+		wrench_wire = RR_ati_cli.wrench_sensor_value.Connect()
+		#Add callback for when the wire value change
+		wrench_wire.WireValueChanged += self.wrench_wire_cb
+		
+		##RR PARAMETERS
+		RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
+		# RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
+		self.RR_robot=RR_robot_sub.GetDefaultClientWait(1)
+		robot_state = RR_robot_sub.SubscribeWire("robot_state")
+		robot_const = RRN.GetConstants("com.robotraconteur.robotics.robot", self.RR_robot)
+		self.halt_mode = robot_const["RobotCommandMode"]["halt"]
+		self.position_mode = robot_const["RobotCommandMode"]["position_command"]
+		self.RobotJointCommand = RRN.GetStructureType("com.robotraconteur.robotics.robot.RobotJointCommand",self.RR_robot)
+		command_seqno = 1
+		self.RR_robot.command_mode = halt_mode
+		time.sleep(0.1)
+		
+		## connect to position command mode wire
+		self.RR_robot.command_mode = position_mode
+		self.cmd_w = RR_robot_sub.SubscribeWire("position_command")
+	
+	def wrench_wire_cb(self,w,value,time):
+
+		self.ft_reading = [value['force']['x'],value['force']['y'],value['force']['z'],value['torque']['x'],value['torque']['y'],value['torque']['z']]
+
+	def force_load_z(self,force_z,q_end):
+
+		target_T = robot.fwd(q_end)
+	
+	def jog_joint_position_cmd(q,v=0.4,wait_time=0):
+		global robot_state
+
+		q_start=self.robot_state.InValue.joint_position
+		total_time=np.linalg.norm(q-q_start)/v
+
+		start_time=time.time()
+		while time.time()-start_time<total_time:
+			# Set the joint command
+			frac=(time.time()-start_time)/total_time
+			self.position_cmd(frac*q+(1-frac)*q_start)
+			
+		###additional points for accuracy
+		start_time=time.time()
+		while time.time()-start_time<wait_time:
+			self.position_cmd(q)
+	
+	def trajectory_position_cmd(self,q_all,v=0.4):
+
+		lamq_bp=[0]
+		for i in range(len(q_all)-1):
+			lamq_bp.append(lamq_bp[-1]+np.linalg.norm(q_all[i+1]-q_all[i]))
+		time_bp=np.array(lamq_bp)/v
+		seg=1
+
+		start_time=time.time()
+		while time.time()-start_time<time_bp[-1]:
+
+			#find current segment
+			if time.time()-start_time>time_bp[seg]:
+				seg+=1
+			if seg==len(q_all):
+				break
+			frac=(time.time()-start_time-time_bp[seg-1])/(time_bp[seg]-time_bp[seg-1])
+			self.position_cmd(frac*q_all[seg]+(1-frac)*q_all[seg-1])
+
+	def position_cmd(self,q):
+
+		# Increment command_seqno
+		self.command_seqno += 1
+		# Create Fill the RobotJointCommand structure
+		joint_cmd = self.RobotJointCommand()
+		joint_cmd.seqno = self.command_seqno # Strictly increasing command_seqno
+		joint_cmd.state_seqno = self.robot_state.InValue.seqno # Send current robot_state.seqno as failsafe
+		
+		# Set the joint command
+		joint_cmd.command = q
+
+		# Send the joint command to the robot
+		self.cmd_w.SetOutValueAll(joint_cmd)
+
 def main():
-	global  RobotJointCommand, cmd_w, command_seqno, robot_state
-	img_name='wen_out'
+	global  RobotJointCommand, cmd_w, command_seqno, robot_state, robot
+	# img_name='wen_out'
+	img_name='strokes_out'
+
 	ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
 	num_segments=len(glob.glob('path/cartesian_path/'+img_name+'/*.csv'))
 	robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
 	# robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/heh6_pen_ur.csv')
 
-	####################################################FT Connection####################################################
-	ati_tf=NET_FT('192.168.60.100')
-	ati_tf.start_streaming()
+	######## FT sensor info
 	H_pentip2ati=np.loadtxt('config/pentip2ati.csv',delimiter=',')
+	
+	######## Motion Controller ###
+	mctrl = MotionController(robot,ipad_pose,H_pentip2ati)
+
 	F_MAX=0	#maximum pushing force 10N
-
-	##RR PARAMETERS
-	RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
-	# RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
-	RR_robot=RR_robot_sub.GetDefaultClientWait(1)
-	robot_state = RR_robot_sub.SubscribeWire("robot_state")
-	robot_const = RRN.GetConstants("com.robotraconteur.robotics.robot", RR_robot)
-	halt_mode = robot_const["RobotCommandMode"]["halt"]
-	position_mode = robot_const["RobotCommandMode"]["position_command"]
-	trajectory_mode = robot_const["RobotCommandMode"]["trajectory"]
-	jog_mode = robot_const["RobotCommandMode"]["jog"]
-	RobotJointCommand = RRN.GetStructureType("com.robotraconteur.robotics.robot.RobotJointCommand",RR_robot)
-	command_seqno = 1
-	RR_robot.command_mode = halt_mode
-	time.sleep(0.1)
-	# RR_robot.reset_errors()
-	# time.sleep(0.1)
-
-	RR_robot.command_mode = position_mode
-	cmd_w = RR_robot_sub.SubscribeWire("position_command")
 
 	start=True
 	for i in range(num_segments):
@@ -126,8 +141,9 @@ def main():
 				#jog to starting point
 				p_start=pose_start.p+30*ipad_pose[:3,-2]
 				q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
-				jog_joint_position_cmd(q_start)
-				jog_joint_position_cmd(curve_js[0],wait_time=1)
+				mctrl.jog_joint_position_cmd(q_start,wait_time=0.5)
+				
+				mctrl.force_load_z(F_MAX,curve_js[0])
 				ati_tf.set_tare_from_ft()	#clear bias
 				start=False
 			else:
