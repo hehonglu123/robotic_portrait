@@ -3,13 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import glob, cv2, sys, time
 from scipy.interpolate import CubicSpline
-
+from general_robotics_toolbox import *
 sys.path.append('toolbox')
 from robot_def import *
-from vel_emulate_sub import EmulatedVelocityControl
 from lambda_calc import *
 from motion_toolbox import *
-from rpi_ati_net_ft import *
 		
 def spline_js(cartesian_path,curve_js,vd,rate=250):
 	lam=calc_lam_cs(cartesian_path)
@@ -21,11 +19,17 @@ def spline_js(cartesian_path,curve_js,vd,rate=250):
 	return polyfit(lam)
 
 class MotionController(object):
-	def __init__(self,robot,ipad_pose,H_pentip2ati):
+	def __init__(self,robot,ipad_pose,H_pentip2ati,controller_param):
+		
+		# define robots
 		self.robot=robot
+		# pose relationship
 		self.ipad_pose=ipad_pose
+		self.ipad_pose_T = Transform(self.ipad_pose[:3,:3],self.ipad_pose[:3,-1])
 		self.H_pentip2ati=H_pentip2ati
 		self.H_ati2pentip=np.linalg.inv(H_pentip2ati)
+		# controller parameters
+		self.param=controller_param
 
 		####################################################FT Connection####################################################
 		RR_ati_cli=RRN.ConnectService('rr+tcp://localhost:59823?service=ati_sensor')
@@ -35,32 +39,78 @@ class MotionController(object):
 		wrench_wire.WireValueChanged += self.wrench_wire_cb
 		
 		##RR PARAMETERS
-		RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
+		self.RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
 		# RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
-		self.RR_robot=RR_robot_sub.GetDefaultClientWait(1)
-		robot_state = RR_robot_sub.SubscribeWire("robot_state")
+		self.RR_robot=self.RR_robot_sub.GetDefaultClientWait(1)
+		self.robot_state = self.RR_robot_sub.SubscribeWire("robot_state")
 		robot_const = RRN.GetConstants("com.robotraconteur.robotics.robot", self.RR_robot)
 		self.halt_mode = robot_const["RobotCommandMode"]["halt"]
 		self.position_mode = robot_const["RobotCommandMode"]["position_command"]
 		self.RobotJointCommand = RRN.GetStructureType("com.robotraconteur.robotics.robot.RobotJointCommand",self.RR_robot)
-		command_seqno = 1
-		self.RR_robot.command_mode = halt_mode
+		self.command_seqno = 1
+		self.RR_robot.command_mode = self.halt_mode
 		time.sleep(0.1)
+  
+		self.TIMESTEP = 0.004 # egm timestep 4 ms
 		
+	def connect_position_mode(self):
+	 
 		## connect to position command mode wire
-		self.RR_robot.command_mode = position_mode
-		self.cmd_w = RR_robot_sub.SubscribeWire("position_command")
+		self.RR_robot.command_mode = self.position_mode
+		self.cmd_w = self.RR_robot_sub.SubscribeWire("position_command")
 	
 	def wrench_wire_cb(self,w,value,time):
 
 		self.ft_reading = [value['force']['x'],value['force']['y'],value['force']['z'],value['torque']['x'],value['torque']['y'],value['torque']['z']]
 
-	def force_load_z(self,force_z,q_end):
+	def force_impedence_ctrl(self,f_err):
+     
+		return self.param["force_ctrl_damping"]*f_err
 
-		target_T = robot.fwd(q_end)
+	def force_load_z(self,fz_des):
+
+		touch_t = None
+		while True:
+			# force reading
+			ft_tip = self.H_ati2pentip@np.append(self.ft_reading[:3],1)
+			fz_now = ft_tip[2]
+			# tool pose reading
+			q_now = self.robot_state.InValue.joint_position
+			tip_now = self.robot.fwd(q_now)
+			tip_now_ipad = self.ipad_pose_T.inv()*tip_now
+
+			# force control
+			tip_next_ipad = Transform(tip_now_ipad.R,tip_now_ipad.p)
+			if fz_now < self.params['force_epsilon']: # if not touch ipad
+				tip_next_ipad.p[2] = tip_now_ipad.p[2] + -1*self.params['load_speed'] * self.TIMESTEP # move in -z direction
+			else: # when touch ipad
+				if touch_t is None:
+					touch_t=time.time()
+				# track a trapziodal force profile
+				this_fz_des = min(fz_des,(time.time()-touch_t)*self.param["trapzoid_slope"])
+				f_err = this_fz_des-fz_now # feedback error
+				v_des = self.force_impedence_ctrl(f_err) # force control
+				tip_next_ipad.p[2] = tip_now_ipad.p[2] + v_des * self.TIMESTEP # force impedence control
+			
+			# check if force achieved
+			if np.fabs(fz_des-fz_now)<self.params['force_epsilon']:
+				if (time.time()-set_time)>self.parame['settling_time']:
+					break
+			else:
+				set_time = time.time()
+
+			# get joint angles using ik
+			tip_next = self.ipad_pose_T*tip_next_ipad
+			q_des = robot.inv(tip_next.p,tip_next.R,q_now)[0]
+			
+			# send robot position command
+			self.position_cmd(q_des)
+   
+	def trajectory_force_control(self,q_all):
+     
+		pass
 	
-	def jog_joint_position_cmd(q,v=0.4,wait_time=0):
-		global robot_state
+	def jog_joint_position_cmd(self,q,v=0.4,wait_time=0):
 
 		q_start=self.robot_state.InValue.joint_position
 		total_time=np.linalg.norm(q-q_start)/v
@@ -122,11 +172,24 @@ def main():
 
 	######## FT sensor info
 	H_pentip2ati=np.loadtxt('config/pentip2ati.csv',delimiter=',')
+ 
+	######## Controller parameters ###
+	controller_params = {
+        "force_ctrl_damping": 100.0,
+        "force_epsilon": 0.5, # Unit: N
+        "moveL_speed_lin": 25.0, # Unit: mm/sec
+        "moveL_speed_ang": np.radians(10), # Unit: rad/sec
+        "trapzoid_slope": 10, # trapzoidal load profile. Unit: N/sec
+        "load_speed": 20.0, # Unit mm/sec
+        "unload_speed": 1.0 # Unit mm/sec
+        }
 	
 	######## Motion Controller ###
-	mctrl = MotionController(robot,ipad_pose,H_pentip2ati)
+	mctrl = MotionController(robot,ipad_pose,H_pentip2ati,controller_params)
+	mctrl.connect_position_mode()
 
 	F_MAX=0	#maximum pushing force 10N
+	F_des = 2 # desired force = 2N
 
 	start=True
 	for i in range(num_segments):
@@ -142,48 +205,23 @@ def main():
 				p_start=pose_start.p+30*ipad_pose[:3,-2]
 				q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
 				mctrl.jog_joint_position_cmd(q_start,wait_time=0.5)
-				
-				mctrl.force_load_z(F_MAX,curve_js[0])
-				ati_tf.set_tare_from_ft()	#clear bias
+				mctrl.force_load_z(F_des)
+				# clear bias
 				start=False
 			else:
-				pose_cur=robot.fwd(robot_state.InValue.joint_position)
-				p_mid=(pose_start.p+pose_cur.p)/2+20*ipad_pose[:3,-2]
+				h_offset = 20
+    			#arc-like trajectory to next segment
+				p_start=pose_start.p+h_offset*ipad_pose[:3,-2]
+				q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
+				pose_cur=robot.fwd(mctrl.robot_state.InValue.joint_position)
+				p_mid=(pose_start.p+pose_cur.p)/2+h_offset*ipad_pose[:3,-2]
 				q_mid=robot.inv(p_mid,pose_start.R,curve_js[0])[0]
-				#arc-like trajectory to next segment
-				trajectory_position_cmd(np.vstack((robot_state.InValue.joint_position,q_mid,curve_js[0])),v=0.2)
-				jog_joint_position_cmd(curve_js[0],wait_time=0.3)
+				
+				mctrl.trajectory_position_cmd(np.vstack((robot_state.InValue.joint_position,q_mid,q_start)),v=0.2)
+				mctrl.jog_joint_position_cmd(q_start,wait_time=0.3)
+				mctrl.force_load_z(F_des)
 
-			traversal_velocity=50	#mm/s
-			###force feedback drawing trajectory interp
-			
-			# lamq_bp=[0]
-			# for m in range(len(curve_js)-1):
-			# 	lamq_bp.append(lamq_bp[-1]+np.linalg.norm(curve_js[m+1]-curve_js[m]))
-			# time_bp=np.array(lamq_bp)/v
-			# seg=1
-			# start_time=time.time()
-			# while time.time()-start_time<time_bp[-1]:
-
-			# 	#find current segment, give command based on timestamped segments
-			# 	if time.time()-start_time>time_bp[seg]:
-			# 		seg+=1
-			# 	if seg==len(curve_js):
-			# 		break
-			# 	frac=(time.time()-start_time-time_bp[seg-1])/(time_bp[seg]-time_bp[seg-1])
-			# 	#interpolated js position
-			# 	q_d=frac*curve_js[seg]+(1-frac)*curve_js[seg-1]
-			# 	#interpolated force
-			# 	f_d=F_MAX*(frac*pixel_path[seg,-1]+(1-frac)*pixel_path[seg-1,-1])
-			# 	#force feedback
-			# 	res, tf, status = ati_tf.try_read_ft_streaming(.1)###get force feedback
-			# 	f_cur=force_prop(tf,H_pentip2ati[:-1,-1])
-			# 	position_gain=0.05
-			# 	normal_adjustment=position_gain*(f_d-f_cur)
-			# 	q_cmd=q_d+normal_adjustment*np.linalg.pinv(robot.jacobian(q_d))@np.hstack((np.zeros(3),-ipad_pose[:3,-2]))
-
-			# 	position_cmd(q_cmd)
-			# 	print(normal_adjustment,f_cur)
+			traversal_velocity=50
 
 			###force feedback, traj tracking QP
 			pose_cur=robot.fwd(robot_state.InValue.joint_position)
