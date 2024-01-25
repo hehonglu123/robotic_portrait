@@ -1,7 +1,7 @@
 from RobotRaconteur.Client import *
 import numpy as np
 import matplotlib.pyplot as plt
-import glob, cv2, sys, time
+import glob, sys, time
 from scipy.interpolate import CubicSpline
 from general_robotics_toolbox import *
 from copy import deepcopy
