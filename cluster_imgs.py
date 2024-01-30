@@ -25,3 +25,5 @@ image_fdog = gaussian_filter(image_gray, sigma=1) - gaussian_filter(image_gray, 
 # show image
 cv2.imshow("Image", image_fdog)
 cv2.waitKey(0)
+
+### give values to each black pixels, and use them for path planning, like a*
