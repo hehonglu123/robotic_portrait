@@ -41,13 +41,14 @@ class MotionController(object):
         # controller parameters
         self.params=controller_param
 
-        ####################################################FT Connection####################################################
+        #################### FT Connection ####################
         RR_ati_cli=RRN.ConnectService('rr+tcp://localhost:59823?service=ati_sensor')
         #Connect a wire connection
         wrench_wire = RR_ati_cli.wrench_sensor_value.Connect()
         #Add callback for when the wire value change
         wrench_wire.WireValueChanged += self.wrench_wire_cb
         
+        ################ Robot Connection ################
         ##RR PARAMETERS
         self.RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
         # RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
@@ -97,7 +98,7 @@ class MotionController(object):
             ft_record.append(np.append(np.array([time.time(),fz_now]),np.degrees(q_now)))
             # force control
             tip_next_ipad = deepcopy(tip_now_ipad)
-            if np.abs(fz_now) < 0.5 and touch_t is None: # if not touch ipad
+            if np.abs(fz_now) < self.params['force_epsilon'] and touch_t is None: # if not touch ipad
                 tip_next_ipad.p[2] = tip_now_ipad.p[2] + -1*self.params['load_speed'] * self.TIMESTEP # move in -z direction
             else: # when touch ipad
                 if touch_t is None:
@@ -118,7 +119,7 @@ class MotionController(object):
             # get joint angles using ik
             tip_next = self.ipad_pose_T*tip_next_ipad
             # print(tip_next.p)
-            q_des = robot.inv(tip_next.p,tip_next.R,q_now)[0]
+            q_des = self.robot.inv(tip_next.p,tip_next.R,q_now)[0]
             
             # send robot position command
             # if this_st is not None:
@@ -252,7 +253,6 @@ class MotionController(object):
         self.cmd_w.SetOutValueAll(joint_cmd)
 
 def main():
-    global  RobotJointCommand, cmd_w, command_seqno, robot_state, robot
     # img_name='wen_out'
     img_name='strokes_out'
 
@@ -273,7 +273,7 @@ def main():
         "moveL_speed_lin": 10.0, # Unit: mm/sec
         "moveL_speed_ang": np.radians(10), # Unit: rad/sec
         "trapzoid_slope": 1, # trapzoidal load profile. Unit: N/sec
-        "load_speed": 50.0, # Unit mm/sec
+        "load_speed": 10.0, # Unit mm/sec
         "unload_speed": 1.0, # Unit mm/sec
         'settling_time': 1 # Unit: sec
         }
@@ -299,11 +299,15 @@ def main():
             pose_start=robot.fwd(curve_js[0])
             if start:
                 h_offset = 10
+                h_offset_low = 1
                 #jog to starting point
                 p_start=pose_start.p+h_offset*ipad_pose[:3,-2]
                 q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
                 mctrl.jog_joint_position_cmd(q_start,wait_time=0.5)
-                ft_record = mctrl.force_load_z(F_des)
+                p_start=pose_start.p+h_offset_low*ipad_pose[:3,-2]
+                q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
+                mctrl.jog_joint_position_cmd(q_start,wait_time=0.5)
+                ft_record = mctrl.force_load_z(force_path[0])
                 # clear bias
                 start=False
             else:
@@ -317,7 +321,7 @@ def main():
                 
                 mctrl.trajectory_position_cmd(np.vstack((mctrl.robot_state.InValue.joint_position,q_mid,q_start)),v=0.2)
                 mctrl.jog_joint_position_cmd(q_start,wait_time=0.3)
-                ft_record=mctrl.force_load_z(F_des)
+                ft_record=mctrl.force_load_z(force_path[0])
             
             ft_record_load.append(ft_record)
 
