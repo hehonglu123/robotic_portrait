@@ -42,9 +42,9 @@ class MotionController(object):
         self.params=controller_param
 
         #################### FT Connection ####################
-        RR_ati_cli=RRN.ConnectService('rr+tcp://localhost:59823?service=ati_sensor')
+        self.RR_ati_cli=RRN.ConnectService('rr+tcp://localhost:59823?service=ati_sensor')
         #Connect a wire connection
-        wrench_wire = RR_ati_cli.wrench_sensor_value.Connect()
+        wrench_wire = self.RR_ati_cli.wrench_sensor_value.Connect()
         #Add callback for when the wire value change
         wrench_wire.WireValueChanged += self.wrench_wire_cb
         
@@ -270,7 +270,7 @@ def main():
     controller_params = {
         "force_ctrl_damping": 40.0,
         "force_epsilon": 0.1, # Unit: N
-        "moveL_speed_lin": 10.0, # Unit: mm/sec
+        "moveL_speed_lin": 5.0, # Unit: mm/sec
         "moveL_speed_ang": np.radians(10), # Unit: rad/sec
         "trapzoid_slope": 1, # trapzoidal load profile. Unit: N/sec
         "load_speed": 10.0, # Unit mm/sec
@@ -283,7 +283,7 @@ def main():
     mctrl.connect_position_mode()
 
     F_MAX=0	#maximum pushing force 10N
-    F_des = 2 # desired force unit: N
+    F_des = 0.5 # desired force unit: N
 
     start=True
     ft_record_load=[]
@@ -293,13 +293,18 @@ def main():
         pixel_path=np.loadtxt('path/pixel_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,3))
         cartesian_path=np.loadtxt('path/cartesian_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,3))
         curve_js=np.loadtxt('path/js_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,6))
-        force_path=np.loadtxt('force_path/'+img_name+'/%i.csv'%i,delimiter=',')
+        force_path=np.loadtxt('path/force_path/'+img_name+'/%i.csv'%i,delimiter=',')
+        
+        # constant force
+        # force_path = np.ones(len(curve_js))*F_des
+
         if len(curve_js)>1:
 
             pose_start=robot.fwd(curve_js[0])
+            h_offset = 20
+            h_offset_low = 1
             if start:
-                h_offset = 10
-                h_offset_low = 1
+                
                 #jog to starting point
                 p_start=pose_start.p+h_offset*ipad_pose[:3,-2]
                 q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
@@ -307,25 +312,33 @@ def main():
                 p_start=pose_start.p+h_offset_low*ipad_pose[:3,-2]
                 q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
                 mctrl.jog_joint_position_cmd(q_start,wait_time=0.5)
+                # set tare before load force
+                mctrl.RR_ati_cli.setf_param("set_tare", RR.VarValue(True, "bool"))
+                input("Set tare. Start load force?")
+                # load force
                 ft_record = mctrl.force_load_z(force_path[0])
                 # clear bias
                 start=False
             else:
-                h_offset = 10
                 #arc-like trajectory to next segment
                 p_start=pose_start.p+h_offset*ipad_pose[:3,-2]
                 q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
                 pose_cur=robot.fwd(mctrl.robot_state.InValue.joint_position)
                 p_mid=(pose_start.p+pose_cur.p)/2+h_offset*ipad_pose[:3,-2]
                 q_mid=robot.inv(p_mid,pose_start.R,curve_js[0])[0]
-                
                 mctrl.trajectory_position_cmd(np.vstack((mctrl.robot_state.InValue.joint_position,q_mid,q_start)),v=0.2)
+                #jog to starting point
                 mctrl.jog_joint_position_cmd(q_start,wait_time=0.3)
+                p_start=pose_start.p+h_offset_low*ipad_pose[:3,-2]
+                q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
+                mctrl.jog_joint_position_cmd(q_start,wait_time=0.5)
+                # set tare before load force
+                mctrl.RR_ati_cli.setf_param("set_tare", RR.VarValue(True, "bool"))
+                input("Set tare. Start load force?")
+                # load force
                 ft_record=mctrl.force_load_z(force_path[0])
             
             ft_record_load.append(ft_record)
-
-            traversal_velocity=50
 
             #drawing trajectory
             print("Travel trajectory")
@@ -335,7 +348,11 @@ def main():
             ft_record=mctrl.trajectory_force_control(curve_js,force_path)
             ft_record_move.append(ft_record)
 
-            mctrl.jog_joint_position_cmd(q_start,wait_time=0.5)
+            # jog to end point z+hoffset
+            pose_end=robot.fwd(curve_js[-1])
+            p_end=pose_end.p+h_offset*ipad_pose[:3,-2]
+            q_end=robot.inv(p_end,pose_end.R,curve_js[-1])[0]
+            mctrl.jog_joint_position_cmd(q_end,wait_time=0.5)
     
     #jog to end point
     pose_end=robot.fwd(curve_js[-1])
