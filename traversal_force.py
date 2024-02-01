@@ -34,6 +34,10 @@ def image_traversal(img,paper_size,pen_radius):
     
     # plt.imshow(cv2.bitwise_not(binary_image), cmap='gray')
     # plt.show()
+    # binary_image=cv2.resize(binary_image, (img_copy.shape[1],img_copy.shape[0]), interpolation = cv2.INTER_NEAREST )
+    # plt.imshow(cv2.bitwise_not(binary_image), cmap='gray')
+    # plt.show()
+    
 
     img_display=np.zeros(img_gray.shape, dtype="uint8")
     path_all=[]
@@ -107,10 +111,13 @@ def image_traversal(img,paper_size,pen_radius):
 def main():
      ###DFS to traverse connected component
     # img_name='wen_out'
-    img_name='strokes_out'
+    img_name='me_out'
+    # img_name='strokes_out'
     img = cv2.imread('imgs/'+img_name+'.png')
+    print(img.shape)
     paper_size=np.loadtxt('config/paper_size.csv',delimiter=',')
     pen_radius=np.loadtxt('config/pen_radius.csv',delimiter=',')
+    # pen_radius=2
     output_paths=image_traversal(img,paper_size,pen_radius)
     Path('path/pixel_path/'+img_name).mkdir(parents=True, exist_ok=True)
     for i in range(len(output_paths)):
