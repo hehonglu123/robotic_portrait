@@ -3,15 +3,18 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 from copy import deepcopy
+from pathlib import Path
 import sys
+sys.setrecursionlimit(10**6)
 sys.path.append('../search_algorithm')
 from dfs import DFS
 
-img_name = 'wen_name_out.png'
+img_name = 'wen_name_out'
+# img_name = 'name_cali'
 img_dir = '../imgs/'
 
 # Read image
-image_path = Path(img_dir+img_name)
+image_path = Path(img_dir+img_name+'.png')
 image = cv2.imread(str(image_path))
 # show image
 cv2.imshow("Image", image)
@@ -49,12 +52,44 @@ for i in range(len(white_pixels[0])):
         edges.append([x, y])
 print(f"Number of white pixels with 2 white neighbors: {edge_count}")
 
-
-
 ## find min max stroke width
 max_dist = max(dist_transform[white_pixels])
 min_dist = min(dist_transform[white_pixels])
 print(f"Max distance: {max_dist}, Min distance: {min_dist}")
+
+## find strokes with deep first search, starting from the edge pixels
+dfs = DFS(image_skeleton, edges)
+strokes = dfs.search(from_edge=True)
+## split strokes into segments, and find the width of each segment
+strokes_split = []
+for m in range(len(strokes)):
+    indices=[]
+    widths=[]
+    for i in range(len(strokes[m])-1):
+        if np.linalg.norm(strokes[m][i]-strokes[m][i+1])>2:
+            indices.append(i+1)
+        # get the width of the point on the stroke
+        widths.append(dist_transform[strokes[m][i][1],strokes[m][i][0]])
+    widths.append(dist_transform[strokes[m][-1][1],strokes[m][-1][0]])
+    
+    #split path
+    path_split=np.split(strokes[m],indices)
+    widths_split=np.split(widths,indices)
+    for i in range(len(path_split)):
+        strokes_split.append(np.hstack((path_split[i],widths_split[i].reshape(-1,1))))
+strokes = strokes_split
+
+img_viz = np.ones_like(image_thresh_flip)*255
+for stroke in strokes:
+    for x, y, w in stroke:
+        img_viz = cv2.circle(img_viz, (int(x), int(y)), round(w), 0, -1)
+    # cv2.imshow("Image", img_viz)
+    # cv2.waitKey(0)
+
+## save to strokes to file
+Path('../path/pixel_path/'+img_name+'/').mkdir(parents=True, exist_ok=True)
+for i in range(len(strokes)):
+    np.savetxt('../path/pixel_path/'+img_name+'/'+str(i)+'.csv', strokes[i], delimiter=',')
 
 ## plot out estimated output
 image_out = np.ones_like(image_thresh_flip)
