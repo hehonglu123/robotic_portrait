@@ -10,7 +10,7 @@ sys.path.append('../search_algorithm')
 from dfs import DFS
 
 img_name = 'wen_name_out'
-# img_name = 'name_cali'
+# img_name = 'eric_name_out'
 img_dir = '../imgs/'
 
 # Read image
@@ -28,40 +28,53 @@ _, image_thresh = cv2.threshold(image_gray, 15, 255, cv2.THRESH_BINARY)
 plt.imshow(image_thresh, cmap='gray')
 plt.show()
 
-# invert image_thresh
-image_thresh_flip = cv2.bitwise_not(image_thresh)
-## skeletonize
-image_skeleton = cv2.ximgproc.thinning(image_thresh_flip)
-plt.imshow(image_skeleton+image_thresh, cmap='gray')
-plt.show()
+max_width = 11 # in pixels
+while True:
 
-## find the distance closest white pixel in image_thresh using distance transform
-dist_transform = cv2.distanceTransform(image_thresh_flip, cv2.DIST_L2, 5)
+    # invert image_thresh
+    image_thresh_flip = cv2.bitwise_not(image_thresh)
+    ## skeletonize
+    image_skeleton = cv2.ximgproc.thinning(image_thresh_flip)
+    plt.imshow(image_thresh+image_skeleton, cmap='gray')
+    plt.show()
 
-## find white pixels in image_skeleton and loop through them
-white_pixels = np.where(image_skeleton == 255)
+    ## find the distance closest black pixel in image_thresh using distance transform
+    dist_transform = cv2.distanceTransform(image_thresh_flip, cv2.DIST_L2, 5)
 
-edge_count = 0
-edges = []
-for i in range(len(white_pixels[0])):
-    x = white_pixels[1][i]
-    y = white_pixels[0][i]
-    white_n = np.sum(image_skeleton[y-1:y+2, x-1:x+2] > 0)
-    if white_n==2:
-        edge_count+=1
-        edges.append([x, y])
-print(f"Number of white pixels with 2 white neighbors: {edge_count}")
+    ## find white pixels in image_skeleton and loop through them
+    white_pixels = np.where(image_skeleton == 255)
 
-## find min max stroke width
-max_dist = max(dist_transform[white_pixels])
-min_dist = min(dist_transform[white_pixels])
-print(f"Max distance: {max_dist}, Min distance: {min_dist}")
+    edge_count = 0
+    edges = []
+    for i in range(len(white_pixels[0])):
+        x = white_pixels[1][i]
+        y = white_pixels[0][i]
+        white_n = np.sum(image_skeleton[y-1:y+2, x-1:x+2] > 0)
+        if white_n==2:
+            edge_count+=1
+            edges.append([x, y])
+    print(f"Number of white pixels with 2 white neighbors: {edge_count}")
+
+    ## find min max stroke width
+    max_dist = max(dist_transform[white_pixels])
+    min_dist = min(dist_transform[white_pixels])
+    print(f"Max distance: {max_dist}, Min distance: {min_dist}")
+    
+    if round(max_dist) <= max_width:
+        print("Max distance is less than max width")
+        break
+    
+    resize_ratio = max_width/max_dist
+    # resize the image
+    image_thresh = cv2.resize(image_thresh, (int(image_thresh.shape[1]*resize_ratio), int(image_thresh.shape[0]*resize_ratio)), interpolation = cv2.INTER_NEAREST)
+    image_thresh = cv2.resize(image_thresh, (int(image.shape[1]*resize_ratio), int(image.shape[0]*resize_ratio)), interpolation = cv2.INTER_NEAREST)
 
 ## find strokes with deep first search, starting from the edge pixels
 dfs = DFS(image_skeleton, edges)
 strokes = dfs.search(from_edge=True)
 ## split strokes into segments, and find the width of each segment
 strokes_split = []
+all_wdiths = []
 for m in range(len(strokes)):
     indices=[]
     widths=[]
@@ -77,6 +90,7 @@ for m in range(len(strokes)):
     widths_split=np.split(widths,indices)
     for i in range(len(path_split)):
         strokes_split.append(np.hstack((path_split[i],widths_split[i].reshape(-1,1))))
+        all_wdiths.extend(widths_split[i])
 strokes = strokes_split
 
 img_viz = np.ones_like(image_thresh_flip)*255
@@ -90,6 +104,8 @@ for stroke in strokes:
 Path('../path/pixel_path/'+img_name+'/').mkdir(parents=True, exist_ok=True)
 for i in range(len(strokes)):
     np.savetxt('../path/pixel_path/'+img_name+'/'+str(i)+'.csv', strokes[i], delimiter=',')
+## save resized image
+cv2.imwrite('../imgs/'+img_name+'_resized.png', image_thresh)
 
 ## plot out estimated output
 image_out = np.ones_like(image_thresh_flip)
