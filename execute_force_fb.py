@@ -146,10 +146,31 @@ class MotionController(object):
         # get path length
         lam = calc_lam_js(q_all,self.robot)
 
-        # find the time for each segment
-        time_bp=np.array(lam)/self.params['moveL_speed_lin']
+        # find the time for each segment, with acceleration and deceleration
+        time_bp = np.zeros_like(lam)
+        acc = self.params['moveL_acc_lin']
+        vel = 0
+        for i in range(0,len(lam)):
+            if vel>=self.params['moveL_speed_lin']:
+                time_bp[i] = time_bp[i-1]+(lam[i]-lam[i-1])/self.params['moveL_speed_lin']
+            else:
+                time_bp[i] = np.sqrt(2*lam[i]/acc)
+                vel = acc*time_bp[i]
+        time_bp_half = []
+        vel = 0
+        for i in range(len(lam)-1,-1,-1):
+            if vel>=self.params['moveL_speed_lin'] or i<=len(lam)/2:
+                break
+            else:
+                time_bp_half.append(np.sqrt(2*(lam[-1]-lam[i])/acc))
+                vel = acc*time_bp_half[-1]
+        time_bp_half = np.array(time_bp_half)[::-1]
+        time_bp_half = time_bp_half*-1+time_bp_half[0]
+        time_bp[-len(time_bp_half):] = time_bp[-len(time_bp_half)-1]+time_bp_half\
+            +(lam[-len(time_bp_half)]-lam[-len(time_bp_half)-1])/self.params['moveL_speed_lin']
+        ###
+        
         seg=1
-
         start_time=time.time()
         dt=0.004
         current_time=None
@@ -159,6 +180,7 @@ class MotionController(object):
             if current_time is not None:
                 dt = time.time()-current_time
             current_time=time.time()
+            current_time_lookahead = current_time+self.params['lookahead_time']
             
             ### find current segment
             if current_time-start_time>time_bp[seg]:
@@ -166,6 +188,15 @@ class MotionController(object):
             if seg==len(q_all):
                 break
             frac=(current_time-start_time-time_bp[seg-1])/(time_bp[seg]-time_bp[seg-1])
+            ### find lookahead segment
+            if current_time_lookahead-start_time>time_bp[seg]:
+                seg_lookahead=seg+1
+            else:
+                seg_lookahead=seg
+            frac_lookahead=(current_time_lookahead-start_time-time_bp[seg_lookahead-1])/(time_bp[seg_lookahead]-time_bp[seg_lookahead-1])
+            if seg_lookahead==len(q_all):
+                seg_lookahead=seg
+                frac_lookahead=frac
             
             ### force feedback control
             # read force
@@ -173,7 +204,11 @@ class MotionController(object):
             fz_now = float(ft_tip[-1])
             # get current desired force
             fz_des_now = frac*fz_des[seg]+(1-frac)*fz_des[seg-1]
-            f_err = fz_des_now-fz_now # feedback error
+            fz_des_lookahead = frac_lookahead*fz_des[seg_lookahead]+(1-frac_lookahead)*fz_des[seg_lookahead-1]
+            
+            # f_err = fz_des_now-fz_now # feedback error
+            f_err = fz_des_lookahead-fz_now # feedback error lookahead
+            
             v_des_z = self.force_impedence_ctrl(f_err) # force control
             if np.linalg.norm(ft_tip[3:])>FORCE_PROTECTION: # force protection break
                 print("force: ",ft_tip[3:])
@@ -271,19 +306,18 @@ def main():
         "force_ctrl_damping": 40.0,
         "force_epsilon": 0.1, # Unit: N
         "moveL_speed_lin": 5.0, # Unit: mm/sec
+        "moveL_acc_lin": 5.0, # Unit: mm/sec^2
         "moveL_speed_ang": np.radians(10), # Unit: rad/sec
         "trapzoid_slope": 1, # trapzoidal load profile. Unit: N/sec
         "load_speed": 10.0, # Unit mm/sec
         "unload_speed": 1.0, # Unit mm/sec
-        'settling_time': 1 # Unit: sec
+        'settling_time': 1, # Unit: sec
+        "lookahead_time": 1 # Unit: sec
         }
     
     ######## Motion Controller ###
     mctrl = MotionController(robot,ipad_pose,H_pentip2ati,controller_params)
     mctrl.connect_position_mode()
-
-    F_MAX=0	#maximum pushing force 10N
-    F_des = 0.5 # desired force unit: N
 
     start=True
     ft_record_load=[]

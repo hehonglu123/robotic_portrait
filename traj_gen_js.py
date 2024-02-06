@@ -7,7 +7,8 @@ from robot_def import *
 
 def main():
     # img_name='wen_out'
-    img_name='strokes_out'
+    # img_name='strokes_out'
+    img_name='eric_name_out'
     image=cv2.imread('imgs/'+img_name+'.png')
     image_center=np.array([image.shape[1]/2,image.shape[0]/2])
     num_segments=len(glob.glob('path/cartesian_path/'+img_name+'/*.csv'))
