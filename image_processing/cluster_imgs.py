@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 from copy import deepcopy
+import networkx as nx
 
 def check_new_pixel_covered(image_covered, image_circle, bpx, bpy, radias):
     
@@ -48,7 +49,7 @@ def check_circle_valid(image_thresh, image_circle, bpx, bpy, radias):
         return True
 
 # Read image
-image_path = Path("imgs/me_out.png")
+image_path = Path("../imgs/me_out.png")
 image = cv2.imread(str(image_path))
 # show image
 cv2.imshow("Image", image)
@@ -74,18 +75,18 @@ black_pixels = np.where(image_thresh == 0)
 
 ##### covered the image with circles ####
 max_radias = 8
-min_radias = 2
+min_radias = 1
 ## create image_covered, image_vis, image_node
 image_covered = deepcopy(image_thresh)
 image_vis = np.ones_like(image_thresh)
 image_node = np.zeros_like(image_thresh)
+nodes = []
+graph = nx.Graph()
 ## loop through radias max_radias to 1
 for radias in range(max_radias,min_radias-1,-1):
     print("Radias: ", radias)
     ## loop through all black pixels
     for i in range(len(black_pixels[0])):
-        if i % 1000 == 0:
-            print(i/len(black_pixels[0])*100)
         ## get x and y of black pixel
         x = black_pixels[1][i]
         y = black_pixels[0][i]
@@ -111,10 +112,45 @@ for radias in range(max_radias,min_radias-1,-1):
         
         ## add node
         image_node[y,x] = radias
+        nodes.append([x,y,radias])
+        graph.add_node((x,y)) ## add circle center pixel as nodes
+
+## find the distance closest black pixel in image_viz using distance transform
+dist_transform = cv2.distanceTransform(image_vis, cv2.DIST_L2, 5)
 
 plt.imshow(image_vis, cmap='gray')
 plt.show()
 
+print("Total nodes: ", len(nodes))
+blank_thres = 1.5
+leave_paper_weight=2
+for i in range(len(nodes)):
+    for j in range(i+1,len(nodes)):
+        dist = np.sqrt((nodes[i][0]-nodes[j][0])**2 + (nodes[i][1]-nodes[j][1])**2)
+        if dist < nodes[i][2]+nodes[j][2]+blank_thres:
+            # graph.add_node(((nodes[i][0]+nodes[j][0])/2,(nodes[i][1]+nodes[j][1])/2))
+            # graph.add_edge((nodes[i][0],nodes[i][1]),((nodes[i][0]+nodes[j][0])/2,(nodes[i][1]+nodes[j][1])/2))
+            # graph.add_edge((nodes[j][0],nodes[j][1]),((nodes[i][0]+nodes[j][0])/2,(nodes[i][1]+nodes[j][1])/2))
+            graph.add_edge((nodes[i][0],nodes[i][1]),(nodes[j][0],nodes[j][1]),weight=dist)
+            image_node = cv2.line(image_node, (nodes[i][0],nodes[i][1]), (nodes[j][0],nodes[j][1]), max(nodes[i][2],nodes[j][2]), 1)
+        else:
+            # graph.add_edge((nodes[i][0],nodes[i][1]),(nodes[j][0],nodes[j][1]),weight=dist*leave_paper_weight)
+            pass
+
+print("Start tsp...")
+draw_path = nx.approximation.traveling_salesman_problem(graph, cycle=False)
+print("End tsp...")
+
+# options = {
+#     'node_color': 'black',
+#     'node_size': 100,
+#     'width': 3,
+# }  
+# nx.draw_random(graph, **options)
+# plt.show()
+
+image_node_viz=image_node*10
+image_node_viz[0,0]=1
 plt.imshow(image_node*10)
 plt.show()
 
