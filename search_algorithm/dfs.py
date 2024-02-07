@@ -27,12 +27,10 @@ class DFS(object):
         paths = []
         while (self.binary_image>0).any():
             if from_edge:
-                print('here')
                 for i in range(len(self.edges)):
                     if self.binary_image[self.edges[i][1]][self.edges[i][0]] > 0:
                         start_pixel=self.edges[i]
                         break
-                print(start_pixel)
             else:
                 start_pixel=np.where(self.binary_image>0)
                 start_pixel=[(start_pixel[0][0],start_pixel[1][0])]

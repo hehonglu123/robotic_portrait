@@ -8,18 +8,17 @@ import sys
 sys.setrecursionlimit(10**6)
 sys.path.append('../search_algorithm')
 from dfs import DFS
+import networkx as nx
 
 img_name = 'wen_name_out'
 # img_name = 'eric_name_out'
 img_dir = '../imgs/'
 
+save_paths = False
+
 # Read image
 image_path = Path(img_dir+img_name+'.png')
 image = cv2.imread(str(image_path))
-# show image
-cv2.imshow("Image", image)
-cv2.waitKey(0)
-
 ## convert image to gray
 image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 ## thresholding
@@ -100,12 +99,13 @@ for stroke in strokes:
     # cv2.imshow("Image", img_viz)
     # cv2.waitKey(0)
 
-## save to strokes to file
-Path('../path/pixel_path/'+img_name+'/').mkdir(parents=True, exist_ok=True)
-for i in range(len(strokes)):
-    np.savetxt('../path/pixel_path/'+img_name+'/'+str(i)+'.csv', strokes[i], delimiter=',')
-## save resized image
-cv2.imwrite('../imgs/'+img_name+'_resized.png', image_thresh)
+if save_paths:
+    ## save to strokes to file
+    Path('../path/pixel_path/'+img_name+'/').mkdir(parents=True, exist_ok=True)
+    for i in range(len(strokes)):
+        np.savetxt('../path/pixel_path/'+img_name+'/'+str(i)+'.csv', strokes[i], delimiter=',')
+    ## save resized image
+    cv2.imwrite('../imgs/'+img_name+'_resized.png', image_thresh)
 
 ## plot out estimated output
 image_out = np.ones_like(image_thresh_flip)
@@ -116,3 +116,50 @@ for i in range(len(white_pixels[0])):
     image_out = cv2.circle(image_out, (x, y), round(dist_transform[y, x]), 0, -1)
 plt.imshow(image_out, cmap='gray')
 plt.show()
+
+
+#### test building graph
+directions = [(-1, 0), (0, 1), (1, 0), (0, -1), (-1, -1), (-1, 1), (1, 1), (1, -1)]
+white_pix_arr = np.array([white_pixels[1],white_pixels[0]]).T
+print(white_pix_arr)
+graph = nx.Graph()
+draw_graph_pos={}
+for i in range(len(white_pix_arr)):
+    graph.add_node((white_pix_arr[i][0],white_pix_arr[i][1]),width=round(dist_transform[white_pix_arr[i][1], white_pix_arr[i][0]]))
+    draw_graph_pos[(white_pix_arr[i][0],white_pix_arr[i][1])]=(white_pix_arr[i][0],white_pix_arr[i][1])
+    for direction in directions:
+        if (white_pix_arr[i]+direction).tolist() in white_pix_arr.tolist():
+            graph.add_edge((white_pix_arr[i][0],white_pix_arr[i][1]),tuple(white_pix_arr[i]+direction),weight=np.linalg.norm(direction))
+for i in range(len(edges)):
+    for j in range(i+1,len(edges)):
+        dist = np.sqrt((edges[i][0]-edges[j][0])**2 + (edges[i][1]-edges[j][1])**2)
+        graph.add_edge((edges[i][0],edges[i][1]),(edges[j][0],edges[j][1]),weight=dist*2)
+
+options = {
+    'node_color': 'black',
+    'node_size': 10,
+}  
+nx.draw(graph, draw_graph_pos, **options)
+plt.show()
+print(graph)
+
+print("Start tsp...")
+draw_path = nx.approximation.traveling_salesman_problem(graph, cycle=False)
+print("End tsp...")
+
+strokes = []
+stroke=[]
+for i in range(len(draw_path)):
+    stroke.append(draw_path[i])
+    if i==len(draw_path)-1:
+        strokes.append(stroke)
+    elif np.linalg.norm(np.array(draw_path[i])-np.array(draw_path[i+1]))>2:
+        strokes.append(stroke)
+        stroke=[]
+
+image_out = np.ones_like(image_thresh_flip)*255
+for n in draw_path:
+    print(n)
+    image_out = cv2.circle(image_out, n, round(graph.nodes[n]['width']), 0, -1)
+    cv2.imshow("Image", image_out)
+    cv2.waitKey(0)
