@@ -5,49 +5,6 @@ from pathlib import Path
 from copy import deepcopy
 import networkx as nx
 
-def check_new_pixel_covered(image_covered, image_circle, bpx, bpy, radias):
-    
-    y_len, x_len = image_thresh.shape
-    # get circle boundaries
-    x_min = max(0,bpx-radias)
-    y_min = max(0,bpy-radias)
-    x_max = min(x_len,bpx+radias+1)
-    y_max = min(y_len,bpy+radias+1)
-    
-    ## element-wise OR between image_covered and image_circle
-    image_or = np.logical_or(image_covered[y_min:y_max,x_min:x_max], image_circle[y_min:y_max,x_min:x_max])
-    
-    ## if the OR operation is different from image_circle, then continue
-    if (image_or == False).any():
-        return True
-    else:
-        # if radias<5:
-        #     plt.imshow(image_covered[y_min:y_max,x_min:x_max], cmap='gray')
-        #     plt.show()
-        #     plt.imshow(image_circle[y_min:y_max,x_min:x_max], cmap='gray')
-        #     plt.show()
-        #     plt.imshow(image_or, cmap='gray')
-        #     plt.show()
-        #     input("Not covered")
-        return False
-
-def check_circle_valid(image_thresh, image_circle, bpx, bpy, radias):
-    
-    y_len, x_len = image_thresh.shape
-    # get circle boundaries
-    x_min = max(0,bpx-radias)
-    y_min = max(0,bpy-radias)
-    x_max = min(x_len,bpx+radias+1)
-    y_max = min(y_len,bpy+radias+1)
-    
-    ## element-wise OR between image_thresh and image_circle
-    image_or = np.logical_or(image_thresh[y_min:y_max,x_min:x_max], image_circle[y_min:y_max,x_min:x_max])
-    ## if the OR operation is different from image_circle, then continue
-    if (image_or != image_circle[y_min:y_max,x_min:x_max]).any():
-        return False
-    else:
-        return True
-
 # Read image
 image_path = Path("../imgs/me_out.png")
 image = cv2.imread(str(image_path))
