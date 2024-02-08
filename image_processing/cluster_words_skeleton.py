@@ -14,7 +14,7 @@ img_name = 'wen_name_out'
 # img_name = 'eric_name_out'
 img_dir = '../imgs/'
 
-save_paths = False
+save_paths = True
 
 # Read image
 image_path = Path(img_dir+img_name+'.png')

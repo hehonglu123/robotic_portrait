@@ -48,12 +48,15 @@ def check_circle_valid(image_thresh, image_circle, bpx, bpy, radias):
     else:
         return True
 
+save_paths=True
+
 # Read image
-image_path = Path("../imgs/me_out.png")
+img_name='me_out'
+image_path = Path("../imgs/"+img_name+".png")
 image = cv2.imread(str(image_path))
 # show image
-cv2.imshow("Image", image)
-cv2.waitKey(0)
+# cv2.imshow("Image", image)
+# cv2.waitKey(0)
 
 ## convert image to gray
 image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -63,19 +66,18 @@ _, image_thresh = cv2.threshold(image_gray, 200, 255, cv2.THRESH_BINARY)
 plt.imshow(image_thresh, cmap='gray')
 plt.show()
 
-# # invert image_thresh
-# image_thresh = cv2.bitwise_not(image_thresh)
-# ## skeletonize
-# image_skeleton = cv2.ximgproc.thinning(image_thresh)
-# plt.imshow(image_skeleton, cmap='gray')
-# plt.show()
+# resize image
+size_ratio = 2
+print("Original image size: ", image_thresh.shape)
+image_thresh = cv2.resize(image_thresh, (int(image_thresh.shape[1]*size_ratio), int(image_thresh.shape[0]*size_ratio)), interpolation = cv2.INTER_NEAREST)
+print("Resized image size: ", image_thresh.shape)
 
 ## find all black pixels
 black_pixels = np.where(image_thresh == 0)
 
 ##### covered the image with circles ####
-max_radias = 8
-min_radias = 1
+max_radias = 10
+min_radias = 2
 ## create image_covered, image_vis, image_node
 image_covered = deepcopy(image_thresh)
 image_vis = np.ones_like(image_thresh)
@@ -114,7 +116,7 @@ for radias in range(max_radias,min_radias-1,-1):
         ## add node
         image_node[y,x] = radias
         nodes.append([x,y,radias])
-        graph.add_node((x,y)) ## add circle center pixel as nodes
+        graph.add_node((x,y),width=radias) ## add circle center pixel as nodes
         draw_graph_pos[(x,y)]=(x,y)
 
 ## find the distance closest black pixel in image_viz using distance transform
@@ -138,6 +140,7 @@ for i in range(len(nodes)):
         else:
             # graph.add_edge((nodes[i][0],nodes[i][1]),(nodes[j][0],nodes[j][1]),weight=dist*leave_paper_weight)
             pass
+print("graph",graph)
 
 options = {
     'node_color': 'black',
@@ -146,9 +149,43 @@ options = {
 nx.draw(graph, draw_graph_pos, **options)
 plt.show()
 
+## check isolation
+graph.remove_nodes_from(list(nx.isolates(graph)))
+nx.draw(graph,pos=draw_graph_pos, **options)
+plt.show()
+
+## check connectivity
+all_graphs = [graph.subgraph(c).copy() for c in nx.connected_components(graph)]
+
 print("Start tsp...")
-draw_path = nx.approximation.traveling_salesman_problem(graph, cycle=False)
+total_g=len(all_graphs)
+all_paths=[]
+count=1
+for subg in all_graphs:    
+    print("graph: ",count,"/",total_g)
+    draw_path = nx.approximation.traveling_salesman_problem(subg, cycle=False)
+    all_paths.append(draw_path)
+    count+=1
 print("End tsp...")
+
+strokes_split = []
+for i in range(len(all_paths)):
+    stroke=[]
+    for j in range(len(all_paths[i])):
+        width = graph.nodes[all_paths[i][j]]['width']
+        this_p = list(all_paths[i][j])
+        this_p.append(width)
+        stroke.append(this_p)
+    strokes_split.append(stroke)
+strokes=strokes_split
+
+if save_paths:
+    ## save to strokes to file
+    Path('../path/pixel_path/'+img_name+'/').mkdir(parents=True, exist_ok=True)
+    for i in range(len(strokes)):
+        np.savetxt('../path/pixel_path/'+img_name+'/'+str(i)+'.csv', strokes[i], delimiter=',')
+    ## save resized image
+    cv2.imwrite('../imgs/'+img_name+'_resized.png', image_thresh)
 
 # options = {
 #     'node_color': 'black',

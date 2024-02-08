@@ -6,7 +6,7 @@ end_force = 1  # Ending force. Units: N
 end_length = 2  # Ending length
 
 ### linear up #######
-seg_i=2
+seg_i=0
 # read path from file
 path = np.loadtxt("cartesian_path/strokes_out/"+str(seg_i)+".csv", delimiter=",")
 path_length = len(path)
@@ -18,7 +18,7 @@ force_profile = np.append(force_profile, np.ones(end_length)*end_force)
 np.savetxt("force_path/strokes_out/"+str(seg_i)+".csv", force_profile, delimiter=",")
 
 ### linear down #######
-seg_i=0
+seg_i=1
 # read path from file
 path = np.loadtxt("cartesian_path/strokes_out/"+str(seg_i)+".csv", delimiter=",")
 path_length = len(path)
@@ -30,7 +30,7 @@ force_profile = np.append(force_profile, np.ones(end_length)*start_force)
 np.savetxt("force_path/strokes_out/"+str(seg_i)+".csv", force_profile, delimiter=",")
 
 ### linear up and down, 2 segments #######
-seg_i=1
+seg_i=2
 # read path from file
 path = np.loadtxt("cartesian_path/strokes_out/"+str(seg_i)+".csv", delimiter=",")
 path_length = len(path)

@@ -25,6 +25,7 @@ class DFS(object):
         
         directions = [(-1, 0), (0, 1), (1, 0), (0, -1), (-1, -1), (-1, 1), (1, 1), (1, -1)]
         paths = []
+        last_start_pixel=None
         while (self.binary_image>0).any():
             if from_edge:
                 for i in range(len(self.edges)):
@@ -34,9 +35,14 @@ class DFS(object):
             else:
                 start_pixel=np.where(self.binary_image>0)
                 start_pixel=[(start_pixel[0][0],start_pixel[1][0])]
+            if last_start_pixel==start_pixel:
+                break
             path=[]
             self.reach_edge=False
             dfs(start_pixel[0],start_pixel[1])
             paths.append(np.array(path))
+
+            last_start_pixel=start_pixel
+
         
         return paths

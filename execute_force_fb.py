@@ -11,6 +11,7 @@ from lambda_calc import *
 from motion_toolbox import *
 
 FORCE_PROTECTION = 5  # Force protection. Units: N
+SHOW_STATUS = False
 
 def spline_js(cartesian_path,curve_js,vd,rate=250):
     lam=calc_lam_cs(cartesian_path)
@@ -54,6 +55,8 @@ class MotionController(object):
         # RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
         self.RR_robot=self.RR_robot_sub.GetDefaultClientWait(1)
         self.robot_state = self.RR_robot_sub.SubscribeWire("robot_state")
+        time.sleep(0.1)
+
         robot_const = RRN.GetConstants("com.robotraconteur.robotics.robot", self.RR_robot)
         self.halt_mode = robot_const["RobotCommandMode"]["halt"]
         self.position_mode = robot_const["RobotCommandMode"]["position_command"]
@@ -147,28 +150,34 @@ class MotionController(object):
         lam = calc_lam_js(q_all,self.robot)
 
         # find the time for each segment, with acceleration and deceleration
-        time_bp = np.zeros_like(lam)
-        acc = self.params['moveL_acc_lin']
-        vel = 0
-        for i in range(0,len(lam)):
-            if vel>=self.params['moveL_speed_lin']:
-                time_bp[i] = time_bp[i-1]+(lam[i]-lam[i-1])/self.params['moveL_speed_lin']
-            else:
-                time_bp[i] = np.sqrt(2*lam[i]/acc)
-                vel = acc*time_bp[i]
-        time_bp_half = []
-        vel = 0
-        for i in range(len(lam)-1,-1,-1):
-            if vel>=self.params['moveL_speed_lin'] or i<=len(lam)/2:
-                break
-            else:
-                time_bp_half.append(np.sqrt(2*(lam[-1]-lam[i])/acc))
-                vel = acc*time_bp_half[-1]
-        time_bp_half = np.array(time_bp_half)[::-1]
-        time_bp_half = time_bp_half*-1+time_bp_half[0]
-        time_bp[-len(time_bp_half):] = time_bp[-len(time_bp_half)-1]+time_bp_half\
-            +(lam[-len(time_bp_half)]-lam[-len(time_bp_half)-1])/self.params['moveL_speed_lin']
-        ###
+        if len(lam)>2:
+            time_bp = np.zeros_like(lam)
+            acc = self.params['moveL_acc_lin']
+            vel = 0
+            for i in range(0,len(lam)):
+                if vel>=self.params['moveL_speed_lin']:
+                    time_bp[i] = time_bp[i-1]+(lam[i]-lam[i-1])/self.params['moveL_speed_lin']
+                else:
+                    time_bp[i] = np.sqrt(2*lam[i]/acc)
+                    vel = acc*time_bp[i]
+            time_bp_half = []
+            vel = 0
+            for i in range(len(lam)-1,-1,-1):
+                if vel>=self.params['moveL_speed_lin'] or i<=len(lam)/2:
+                    break
+                else:
+                    time_bp_half.append(np.sqrt(2*(lam[-1]-lam[i])/acc))
+                    vel = acc*time_bp_half[-1]
+            time_bp_half = np.array(time_bp_half)[::-1]
+            time_bp_half = time_bp_half*-1+time_bp_half[0]
+            time_bp[-len(time_bp_half):] = time_bp[-len(time_bp_half)-1]+time_bp_half\
+                +(lam[-len(time_bp_half)]-lam[-len(time_bp_half)-1])/self.params['moveL_speed_lin']
+            if SHOW_STATUS:
+                plt.plot(time_bp,lam)
+                plt.show()
+            ###
+        else:
+            time_bp = lam/self.params['moveL_speed_lin']
         
         seg=1
         start_time=time.time()
@@ -193,8 +202,10 @@ class MotionController(object):
                 seg_lookahead=seg+1
             else:
                 seg_lookahead=seg
-            frac_lookahead=(current_time_lookahead-start_time-time_bp[seg_lookahead-1])/(time_bp[seg_lookahead]-time_bp[seg_lookahead-1])
-            if seg_lookahead==len(q_all):
+            
+            if seg_lookahead<len(q_all):
+                frac_lookahead=(current_time_lookahead-start_time-time_bp[seg_lookahead-1])/(time_bp[seg_lookahead]-time_bp[seg_lookahead-1])
+            else:
                 seg_lookahead=seg
                 frac_lookahead=frac
             
@@ -289,7 +300,12 @@ class MotionController(object):
 
 def main():
     # img_name='wen_out'
-    img_name='strokes_out'
+    # img_name='strokes_out'
+    img_name='wen_name_out'
+    # img_name='me_out'
+
+    print("Drawing %s"%img_name)
+    time.sleep(1)
 
     ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
     num_segments=len(glob.glob('path/cartesian_path/'+img_name+'/*.csv'))
@@ -306,13 +322,13 @@ def main():
         "force_ctrl_damping": 40.0,
         "force_epsilon": 0.1, # Unit: N
         "moveL_speed_lin": 5.0, # Unit: mm/sec
-        "moveL_acc_lin": 5.0, # Unit: mm/sec^2
+        "moveL_acc_lin": 1.0, # Unit: mm/sec^2
         "moveL_speed_ang": np.radians(10), # Unit: rad/sec
         "trapzoid_slope": 1, # trapzoidal load profile. Unit: N/sec
         "load_speed": 10.0, # Unit mm/sec
         "unload_speed": 1.0, # Unit mm/sec
         'settling_time': 1, # Unit: sec
-        "lookahead_time": 1 # Unit: sec
+        "lookahead_time": 0.5 # Unit: sec
         }
     
     ######## Motion Controller ###
@@ -322,7 +338,7 @@ def main():
     start=True
     ft_record_load=[]
     ft_record_move=[]
-    for i in range(num_segments):
+    for i in range(0,num_segments):
         print('Segment %i'%i)
         pixel_path=np.loadtxt('path/pixel_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,3))
         cartesian_path=np.loadtxt('path/cartesian_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,3))
@@ -348,7 +364,8 @@ def main():
                 mctrl.jog_joint_position_cmd(q_start,wait_time=0.5)
                 # set tare before load force
                 mctrl.RR_ati_cli.setf_param("set_tare", RR.VarValue(True, "bool"))
-                input("Set tare. Start load force?")
+                if SHOW_STATUS:
+                    input("Set tare. Start load force?")
                 # load force
                 ft_record = mctrl.force_load_z(force_path[0])
                 # clear bias
@@ -368,7 +385,8 @@ def main():
                 mctrl.jog_joint_position_cmd(q_start,wait_time=0.5)
                 # set tare before load force
                 mctrl.RR_ati_cli.setf_param("set_tare", RR.VarValue(True, "bool"))
-                input("Set tare. Start load force?")
+                if SHOW_STATUS:
+                    input("Set tare. Start load force?")
                 # load force
                 ft_record=mctrl.force_load_z(force_path[0])
             
