@@ -162,7 +162,7 @@ total_g=len(all_graphs)
 all_paths=[]
 count=1
 for subg in all_graphs:    
-    print("graph: ",count,"/",total_g)
+    print("graph: ",count,"/",total_g," nodes: ",subg.number_of_nodes(), " edges: ", subg.number_of_edges())
     draw_path = nx.approximation.traveling_salesman_problem(subg, cycle=False)
     all_paths.append(draw_path)
     count+=1

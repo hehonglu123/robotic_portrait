@@ -150,12 +150,21 @@ print("End tsp...")
 strokes = []
 stroke=[]
 for i in range(len(draw_path)):
-    stroke.append(draw_path[i])
+    this_p = list(draw_path[i])
+    this_p.append(graph.nodes[draw_path[i]]['width'])
+    stroke.append(this_p)
     if i==len(draw_path)-1:
         strokes.append(stroke)
     elif np.linalg.norm(np.array(draw_path[i])-np.array(draw_path[i+1]))>2:
         strokes.append(stroke)
         stroke=[]
+if save_paths:
+    ## save to strokes to file
+    Path('../path/pixel_path/'+img_name+'/').mkdir(parents=True, exist_ok=True)
+    for i in range(len(strokes)):
+        np.savetxt('../path/pixel_path/'+img_name+'/'+str(i)+'.csv', strokes[i], delimiter=',')
+    ## save resized image
+    cv2.imwrite('../imgs/'+img_name+'_resized.png', image_thresh)
 
 image_out = np.ones_like(image_thresh_flip)*255
 for n in draw_path:

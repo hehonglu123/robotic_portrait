@@ -12,15 +12,15 @@ class DFS(object):
     def search(self,from_edge=False):
         
         def dfs(x, y):
+            if x==383 and y==618:
+                print('dfs',x,y,'path len',len(path))
             # Check if the current pixel is within the image and belongs to the connected component
             if 0 <= x < self.binary_image.shape[1] and 0 <= y < self.binary_image.shape[0]:
-                if self.binary_image[y][x] > 0:
+                if self.binary_image[y][x] > 0.01:
                     self.binary_image[y][x] = 0
                     path.append([x,y])
                     
                     for dx, dy in directions:
-                        if self.reach_edge:
-                            continue
                         dfs(x + dx, y + dy)
         
         directions = [(-1, 0), (0, 1), (1, 0), (0, -1), (-1, -1), (-1, 1), (1, 1), (1, -1)]
@@ -35,14 +35,12 @@ class DFS(object):
             else:
                 start_pixel=np.where(self.binary_image>0)
                 start_pixel=[(start_pixel[0][0],start_pixel[1][0])]
-            if last_start_pixel==start_pixel:
+            if np.all(last_start_pixel==start_pixel):
                 break
             path=[]
-            self.reach_edge=False
             dfs(start_pixel[0],start_pixel[1])
             paths.append(np.array(path))
 
             last_start_pixel=start_pixel
-
         
         return paths
