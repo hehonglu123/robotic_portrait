@@ -34,7 +34,8 @@ def image2plane(img,ipad_pose,pixel2mm,pixel_paths,pixel2force):
 def main():
     # img_name='eric_name_out'
     # img_name='wen_name_out'
-    img_name='me_out'
+    # img_name='me_out'
+    img_name='new_year_out'
     num_segments=len(glob.glob('path/pixel_path/'+img_name+'/*.csv'))
     pixel_paths=[]
     for i in range(num_segments):

@@ -88,6 +88,7 @@ class MotionController(object):
 
         touch_t = None
         this_st=None
+        set_time=None
         ft_record=[]
         while True:
             # force reading
@@ -114,6 +115,8 @@ class MotionController(object):
             
             # check if force achieved
             if np.fabs(fz_des-fz_now)<self.params['force_epsilon']:
+                if set_time is None:
+                    set_time = time.time()
                 if (time.time()-set_time)>self.params['settling_time']:
                     break
             else:
@@ -301,8 +304,9 @@ class MotionController(object):
 def main():
     # img_name='wen_out'
     # img_name='strokes_out'
-    img_name='wen_name_out'
+    # img_name='wen_name_out'
     # img_name='me_out'
+    img_name='new_year_out'
 
     print("Drawing %s"%img_name)
     time.sleep(1)
@@ -319,9 +323,9 @@ def main():
  
     ######## Controller parameters ###
     controller_params = {
-        "force_ctrl_damping": 40.0,
+        "force_ctrl_damping": 45.0,
         "force_epsilon": 0.1, # Unit: N
-        "moveL_speed_lin": 5.0, # Unit: mm/sec
+        "moveL_speed_lin": 3.0, # Unit: mm/sec
         "moveL_acc_lin": 1.0, # Unit: mm/sec^2
         "moveL_speed_ang": np.radians(10), # Unit: rad/sec
         "trapzoid_slope": 1, # trapzoidal load profile. Unit: N/sec
@@ -408,7 +412,7 @@ def main():
     
     #jog to end point
     pose_end=robot.fwd(curve_js[-1])
-    p_end=pose_end.p+20*ipad_pose[:3,-2]
+    p_end=pose_end.p+150*ipad_pose[:3,-2]
     q_end=robot.inv(p_end,pose_end.R,curve_js[-1])[0]
     mctrl.jog_joint_position_cmd(q_end)
 
