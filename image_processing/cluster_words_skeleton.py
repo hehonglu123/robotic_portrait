@@ -12,8 +12,10 @@ import networkx as nx
 
 img_name = 'wen_name_out'
 # img_name = 'eric_name_out'
+img_name = 'new_year_out'
 img_dir = '../imgs/'
 
+edge_connection_thres=80
 save_paths = True
 
 # Read image
@@ -130,10 +132,11 @@ for i in range(len(white_pix_arr)):
     for direction in directions:
         if (white_pix_arr[i]+direction).tolist() in white_pix_arr.tolist():
             graph.add_edge((white_pix_arr[i][0],white_pix_arr[i][1]),tuple(white_pix_arr[i]+direction),weight=np.linalg.norm(direction))
-for i in range(len(edges)):
-    for j in range(i+1,len(edges)):
-        dist = np.sqrt((edges[i][0]-edges[j][0])**2 + (edges[i][1]-edges[j][1])**2)
-        graph.add_edge((edges[i][0],edges[i][1]),(edges[j][0],edges[j][1]),weight=dist*2)
+# for i in range(len(edges)):
+#     for j in range(i+1,len(edges)):
+#         dist = np.sqrt((edges[i][0]-edges[j][0])**2 + (edges[i][1]-edges[j][1])**2)
+#         if dist<edge_connection_thres:
+#             graph.add_edge((edges[i][0],edges[i][1]),(edges[j][0],edges[j][1]),weight=dist*2)
 
 options = {
     'node_color': 'black',
