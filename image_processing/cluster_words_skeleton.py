@@ -11,9 +11,11 @@ from dfs import DFS
 import networkx as nx
 
 # img_name = 'wen_name_out'
+# img_name = 'eric_name_out'
 img_name = 'new_year_out'
 img_dir = '../imgs/'
 
+edge_connection_thres=80
 save_paths = True
 
 # Read image
@@ -134,8 +136,12 @@ for i in range(len(white_pix_arr)):
 #     for j in range(i+1,len(edges)):
 #         dist = np.sqrt((edges[i][0]-edges[j][0])**2 + (edges[i][1]-edges[j][1])**2)
 #         graph.add_edge((edges[i][0],edges[i][1]),(edges[j][0],edges[j][1]),weight=dist*2)
+#         if dist<edge_connection_thres:
+#             graph.add_edge((edges[i][0],edges[i][1]),(edges[j][0],edges[j][1]),weight=dist*2)
 graph.remove_nodes_from(list(nx.isolates(graph)))
 print("Total nodes: ", graph.number_of_nodes(), "Total edges: ", graph.number_of_edges())
+
+
 options = {
     'node_color': 'black',
     'node_size': 10,

@@ -17,9 +17,10 @@ G = nx.DiGraph()
 # Add edges
 # G.add_edges_from([(3, 1), (3, 2), (3, 4), (3, 5)])
 G.add_edge((1,2), (3,4))
-G.add_edge((3,4),(1,2))
-G.add_edge((5,6), (1,2))
-G.add_edge((1,2), (5,6))
+# G.add_edge((3,4),(1,2))
+G.add_edge((3,4), (5,6))
+G.add_edge((5,6), (7,8))
+G.add_edge((7,8),(9,10))
 print(G)
 # Draw the graph
 nx.draw(G, with_labels=True)
