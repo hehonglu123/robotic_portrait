@@ -5,6 +5,7 @@ import glob, sys, time
 from scipy.interpolate import CubicSpline
 from general_robotics_toolbox import *
 from copy import deepcopy
+from pathlib import Path
 sys.path.append('toolbox')
 from robot_def import *
 from lambda_calc import *
@@ -88,6 +89,7 @@ class MotionController(object):
 
         touch_t = None
         this_st=None
+        set_time=None
         ft_record=[]
         while True:
             # force reading
@@ -114,6 +116,8 @@ class MotionController(object):
             
             # check if force achieved
             if np.fabs(fz_des-fz_now)<self.params['force_epsilon']:
+                if set_time is None:
+                    set_time = time.time()
                 if (time.time()-set_time)>self.params['settling_time']:
                     break
             else:
@@ -301,8 +305,12 @@ class MotionController(object):
 def main():
     # img_name='wen_out'
     # img_name='strokes_out'
+    # img_name='strokes_out_3'
     img_name='wen_name_out'
     # img_name='me_out'
+    # img_name='new_year_out'
+
+    visualize=False
 
     print("Drawing %s"%img_name)
     time.sleep(1)
@@ -319,16 +327,16 @@ def main():
  
     ######## Controller parameters ###
     controller_params = {
-        "force_ctrl_damping": 40.0,
+        "force_ctrl_damping": 180.0,
         "force_epsilon": 0.1, # Unit: N
-        "moveL_speed_lin": 5.0, # Unit: mm/sec
+        "moveL_speed_lin": 3.0, # Unit: mm/sec
         "moveL_acc_lin": 1.0, # Unit: mm/sec^2
         "moveL_speed_ang": np.radians(10), # Unit: rad/sec
         "trapzoid_slope": 1, # trapzoidal load profile. Unit: N/sec
         "load_speed": 10.0, # Unit mm/sec
         "unload_speed": 1.0, # Unit mm/sec
         'settling_time': 1, # Unit: sec
-        "lookahead_time": 0.5 # Unit: sec
+        "lookahead_time": 0.02 # Unit: sec
         }
     
     ######## Motion Controller ###
@@ -340,8 +348,8 @@ def main():
     ft_record_move=[]
     for i in range(0,num_segments):
         print('Segment %i'%i)
-        pixel_path=np.loadtxt('path/pixel_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,3))
-        cartesian_path=np.loadtxt('path/cartesian_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,3))
+        # pixel_path=np.loadtxt('path/pixel_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,3))
+        # cartesian_path=np.loadtxt('path/cartesian_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,3))
         curve_js=np.loadtxt('path/js_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,6))
         force_path=np.loadtxt('path/force_path/'+img_name+'/%i.csv'%i,delimiter=',')
         
@@ -408,15 +416,29 @@ def main():
     
     #jog to end point
     pose_end=robot.fwd(curve_js[-1])
-    p_end=pose_end.p+20*ipad_pose[:3,-2]
+    p_end=pose_end.p+150*ipad_pose[:3,-2]
     q_end=robot.inv(p_end,pose_end.R,curve_js[-1])[0]
     mctrl.jog_joint_position_cmd(q_end)
 
+    # record data
+    Path('record').mkdir(parents=True, exist_ok=True)
     for i in range(len(ft_record_load)):
         ft_record_load[i]=np.array(ft_record_load[i])
         ft_record_move[i]=np.array(ft_record_move[i])
         np.savetxt('record/ft_record_load_%i.csv'%i,ft_record_load[i],delimiter=',')
         np.savetxt('record/ft_record_move_%i.csv'%i,ft_record_move[i],delimiter=',')
+    
+    ## direct visualization
+    if visualize:
+        for i in range(len(ft_record_load)):
+            lam = calc_lam_js(curve_js,robot)
+            lam_exe = calc_lam_js(np.radians(ft_record_move[i][:,2:]),robot)
+            # linear interpolation
+            f_desired = np.interp(lam_exe, lam, force_path)
+            plt.plot(lam_exe,-1*ft_record_move[i][:,1],label='executed force, test '+str(i))
+            plt.plot(lam_exe,f_desired,label='desired force')
+            plt.legend()
+            plt.show()
 
 if __name__ == '__main__':
     main()

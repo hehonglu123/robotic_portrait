@@ -126,32 +126,32 @@ while True:
                 continue
             strokes_split.append(np.hstack((path_split[i],widths_split[i].reshape(-1,1))))
     
-    # ### construct using networkx
-    # directions = [(-1, 0), (0, 1), (1, 0), (0, -1), (-1, -1), (-1, 1), (1, 1), (1, -1)]
-    # white_pixels=np.array(white_pixels).T
-    # graph=nx.Graph()
-    # draw_graph_pos={}
-    # for i in range(len(white_pixels)):
-    #     x = white_pixels[i][1]
-    #     y = white_pixels[i][0]
-    #     graph.add_node((x,y),width=dist_transform[y][x])
-    #     draw_graph_pos[(x,y)]=(x,y)
-    #     for direction in directions:
-    #         x_ = x+direction[0]
-    #         y_ = y+direction[1]
-    #         if 0 <= x_ < image_skeleton.shape[1] and 0 <= y_ < image_skeleton.shape[0]:
-    #             if image_skeleton[y_][x_] > 0:
-    #                 graph.add_node((x_,y_),width=dist_transform[y_][x_])
-    #                 graph.add_edge((x,y),(x_,y_),weight=np.linalg.norm([x-x_,y-y_]))
-    # ## check isolation
-    # graph.remove_nodes_from(list(nx.isolates(graph)))
-    # print("Total nodes: ", graph.number_of_nodes())
-    # options = {
-    # 'node_color': 'black',
-    # 'node_size': 10,
-    # }  
-    # nx.draw(graph, draw_graph_pos, **options)
-    # plt.show()
+    ### construct using networkx
+    directions = [(-1, 0), (0, 1), (1, 0), (0, -1), (-1, -1), (-1, 1), (1, 1), (1, -1)]
+    white_pixels=np.array(white_pixels).T
+    graph=nx.Graph()
+    draw_graph_pos={}
+    for i in range(len(white_pixels)):
+        x = white_pixels[i][1]
+        y = white_pixels[i][0]
+        graph.add_node((x,y),width=dist_transform[y][x])
+        draw_graph_pos[(x,y)]=(x,y)
+        for direction in directions:
+            x_ = x+direction[0]
+            y_ = y+direction[1]
+            if 0 <= x_ < image_skeleton.shape[1] and 0 <= y_ < image_skeleton.shape[0]:
+                if image_skeleton[y_][x_] > 0:
+                    graph.add_node((x_,y_),width=dist_transform[y_][x_])
+                    graph.add_edge((x,y),(x_,y_),weight=np.linalg.norm([x-x_,y-y_]))
+    ## check isolation
+    graph.remove_nodes_from(list(nx.isolates(graph)))
+    print("Total nodes: ", graph.number_of_nodes(), "Total edges: ", graph.number_of_edges())
+    options = {
+    'node_color': 'black',
+    'node_size': 10,
+    }  
+    nx.draw(graph, draw_graph_pos, **options)
+    plt.show()
     
     # # find subgraphs
     # subgraphs = [graph.subgraph(c).copy() for c in nx.connected_components(graph)]
