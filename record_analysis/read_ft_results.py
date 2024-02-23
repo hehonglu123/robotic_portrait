@@ -14,10 +14,10 @@ thin2thick = {'lam':{},'f_actual':{},'f_desired':{}}
 thick2thin = {'lam':{},'f_actual':{},'f_desired':{}}
 bump2bump = {'lam':{},'f_actual':{},'f_desired':{}}
 # all_dir = ['record_0131_1/','record_0131_2/','record_0131_3/']
-all_dir = ['record_0207_2/']
+all_dir = ['record_0221_1/']
 
 for data_dir in all_dir:
-    for i in range(3):
+    for i in range(1):
         # load recorded data
         load_ft = np.loadtxt(data_dir+'ft_record_load_'+str(i)+'.csv',delimiter=',')
         move_ft = np.loadtxt(data_dir+'ft_record_move_'+str(i)+'.csv',delimiter=',')
@@ -50,29 +50,29 @@ for data_dir in all_dir:
             bump2bump['f_actual'][data_dir] = move_ft[:,1]
             bump2bump['f_desired'][data_dir] = f_desired
 
-# plot thin2thick results on one image
-for data_dir in all_dir:
-    plt.plot(thin2thick['lam'][data_dir],thin2thick['f_actual'][data_dir],label='force actual, test '+data_dir[-2])
-plt.plot(thin2thick['lam'][all_dir[0]],thin2thick['f_desired'][all_dir[0]],label='force reference')
-plt.legend(fontsize=16)
-plt.xlabel('path length (mm)',fontsize=16)
-plt.ylabel('force (N)',fontsize=16)
-plt.xticks(fontsize=16)
-plt.yticks(fontsize=16)
-plt.title('Thin to Thick',fontsize=16)
-plt.show()
+# # plot thin2thick results on one image
+# for data_dir in all_dir:
+#     plt.plot(thin2thick['lam'][data_dir],thin2thick['f_actual'][data_dir],label='force actual, test '+data_dir[-2])
+# plt.plot(thin2thick['lam'][all_dir[0]],thin2thick['f_desired'][all_dir[0]],label='force reference')
+# plt.legend(fontsize=16)
+# plt.xlabel('path length (mm)',fontsize=16)
+# plt.ylabel('force (N)',fontsize=16)
+# plt.xticks(fontsize=16)
+# plt.yticks(fontsize=16)
+# plt.title('Thin to Thick',fontsize=16)
+# plt.show()
 
-# plot thick2thin results on one image
-for data_dir in all_dir:
-    plt.plot(thick2thin['lam'][data_dir],thick2thin['f_actual'][data_dir],label='force actual, test '+data_dir[-2])
-plt.plot(thick2thin['lam'][all_dir[0]],thick2thin['f_desired'][all_dir[0]],label='force reference')
-plt.legend(fontsize=16)
-plt.xlabel('path length (mm)',fontsize=16)
-plt.ylabel('force (N)',fontsize=16)
-plt.xticks(fontsize=16)
-plt.yticks(fontsize=16)
-plt.title('Thick to Thin',fontsize=16)
-plt.show()
+# # plot thick2thin results on one image
+# for data_dir in all_dir:
+#     plt.plot(thick2thin['lam'][data_dir],thick2thin['f_actual'][data_dir],label='force actual, test '+data_dir[-2])
+# plt.plot(thick2thin['lam'][all_dir[0]],thick2thin['f_desired'][all_dir[0]],label='force reference')
+# plt.legend(fontsize=16)
+# plt.xlabel('path length (mm)',fontsize=16)
+# plt.ylabel('force (N)',fontsize=16)
+# plt.xticks(fontsize=16)
+# plt.yticks(fontsize=16)
+# plt.title('Thick to Thin',fontsize=16)
+# plt.show()
 
 # plot bump2bump results on one image
 for data_dir in all_dir:
