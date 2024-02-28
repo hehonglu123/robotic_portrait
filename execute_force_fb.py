@@ -4,8 +4,10 @@ import matplotlib.pyplot as plt
 import glob, sys, time
 from scipy.interpolate import CubicSpline
 from general_robotics_toolbox import *
+from abb_robot_client.egm import EGM
 from copy import deepcopy
 from pathlib import Path
+
 sys.path.append('toolbox')
 from robot_def import *
 from lambda_calc import *
@@ -13,6 +15,8 @@ from motion_toolbox import *
 
 FORCE_PROTECTION = 5  # Force protection. Units: N
 SHOW_STATUS = False
+
+USE_RR_ROBOT = False
 
 def spline_js(cartesian_path,curve_js,vd,rate=250):
     lam=calc_lam_cs(cartesian_path)
@@ -51,20 +55,24 @@ class MotionController(object):
         wrench_wire.WireValueChanged += self.wrench_wire_cb
         
         ################ Robot Connection ################
-        ##RR PARAMETERS
-        self.RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
-        # RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
-        self.RR_robot=self.RR_robot_sub.GetDefaultClientWait(1)
-        self.robot_state = self.RR_robot_sub.SubscribeWire("robot_state")
-        time.sleep(0.1)
-
-        robot_const = RRN.GetConstants("com.robotraconteur.robotics.robot", self.RR_robot)
-        self.halt_mode = robot_const["RobotCommandMode"]["halt"]
-        self.position_mode = robot_const["RobotCommandMode"]["position_command"]
-        self.RobotJointCommand = RRN.GetStructureType("com.robotraconteur.robotics.robot.RobotJointCommand",self.RR_robot)
         self.command_seqno = 1
-        self.RR_robot.command_mode = self.halt_mode
-        time.sleep(0.1)
+        if USE_RR_ROBOT:
+            ##RR PARAMETERS
+            self.RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
+            # RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
+            self.RR_robot=self.RR_robot_sub.GetDefaultClientWait(1)
+            self.robot_state = self.RR_robot_sub.SubscribeWire("robot_state")
+            time.sleep(0.1)
+
+            robot_const = RRN.GetConstants("com.robotraconteur.robotics.robot", self.RR_robot)
+            self.halt_mode = robot_const["RobotCommandMode"]["halt"]
+            self.position_mode = robot_const["RobotCommandMode"]["position_command"]
+            self.RobotJointCommand = RRN.GetStructureType("com.robotraconteur.robotics.robot.RobotJointCommand",self.RR_robot)
+            self.RR_robot.command_mode = self.halt_mode
+            time.sleep(0.1)
+            self.connect_position_mode()
+        else: # use EGM else
+            self.egm = EGM()
   
         self.TIMESTEP = 0.004 # egm timestep 4 ms
         
@@ -73,6 +81,32 @@ class MotionController(object):
         ## connect to position command mode wire
         self.RR_robot.command_mode = self.position_mode
         self.cmd_w = self.RR_robot_sub.SubscribeWire("position_command")
+    
+    def position_cmd(self,q):
+
+        # Increment command_seqno
+        self.command_seqno += 1
+        
+        if USE_RR_ROBOT:
+            # Create Fill the RobotJointCommand structure
+            joint_cmd = self.RobotJointCommand()
+            joint_cmd.seqno = self.command_seqno # Strictly increasing command_seqno
+            joint_cmd.state_seqno = self.robot_state.InValue.seqno # Send current robot_state.seqno as failsafe
+            # Set the joint command
+            joint_cmd.command = q
+            # Send the joint command to the robot
+            self.cmd_w.SetOutValueAll(joint_cmd)
+        else:
+            self.egm.send_to_robot(q)
+    
+    def read_position(self):
+        if USE_RR_ROBOT:
+            return self.robot_state.InValue.joint_position
+        else:
+            res, state = self.egm.receive_from_robot(timeout=0.1)
+            if not res:
+                raise Exception("Robot communication lost")
+            return state.joint_angles
     
     def wrench_wire_cb(self,w,value,time):
 
@@ -92,13 +126,18 @@ class MotionController(object):
         set_time=None
         ft_record=[]
         while True:
+            # tool pose reading
+            q_now = self.read_position()
+            tip_now = self.robot.fwd(q_now)
+            tip_now_ipad = self.ipad_pose_T.inv()*tip_now
             # force reading
             ft_tip = self.ad_ati2pentip_T@self.ft_reading
             fz_now = float(ft_tip[-1])
-            # tool pose reading
-            q_now = self.robot_state.InValue.joint_position
-            tip_now = self.robot.fwd(q_now)
-            tip_now_ipad = self.ipad_pose_T.inv()*tip_now
+            # force protection
+            if np.linalg.norm(ft_tip[3:])>FORCE_PROTECTION:
+                print("force: ",ft_tip[3:])
+                print("force too large")
+                break
             # time force joint angle record
             ft_record.append(np.append(np.array([time.time(),fz_now]),np.degrees(q_now)))
             # force control
@@ -134,11 +173,6 @@ class MotionController(object):
             # 		pass
             # this_st=time.time()
             self.position_cmd(q_des)
-
-            if np.linalg.norm(ft_tip[3:])>FORCE_PROTECTION:
-                print("force: ",ft_tip[3:])
-                print("force too large")
-                break
         
         return ft_record
    
@@ -183,12 +217,21 @@ class MotionController(object):
         else:
             time_bp = lam/self.params['moveL_speed_lin']
         
+        ### trajectory force control
         seg=1
         start_time=time.time()
         dt=0.004
         current_time=None
         ft_record=[]
         while time.time()-start_time<time_bp[-1]:
+            # joint reading
+            q_now = self.robot_state.InValue.joint_position
+            tip_now = self.robot.fwd(q_now)
+            tip_now_ipad = self.ipad_pose_T.inv()*tip_now
+            # read force
+            ft_tip = self.ad_ati2pentip_T@self.ft_reading
+            fz_now = float(ft_tip[-1])
+            
             ### get dt
             if current_time is not None:
                 dt = time.time()-current_time
@@ -214,16 +257,11 @@ class MotionController(object):
                 frac_lookahead=frac
             
             ### force feedback control
-            # read force
-            ft_tip = self.ad_ati2pentip_T@self.ft_reading
-            fz_now = float(ft_tip[-1])
             # get current desired force
             fz_des_now = frac*fz_des[seg]+(1-frac)*fz_des[seg-1]
             fz_des_lookahead = frac_lookahead*fz_des[seg_lookahead]+(1-frac_lookahead)*fz_des[seg_lookahead-1]
-            
             # f_err = fz_des_now-fz_now # feedback error
             f_err = fz_des_lookahead-fz_now # feedback error lookahead
-            
             v_des_z = self.force_impedence_ctrl(f_err) # force control
             if np.linalg.norm(ft_tip[3:])>FORCE_PROTECTION: # force protection break
                 print("force: ",ft_tip[3:])
@@ -231,10 +269,6 @@ class MotionController(object):
                 break
             
             ### positoin control
-            # joint reading
-            q_now = self.robot_state.InValue.joint_position
-            tip_now = self.robot.fwd(q_now)
-            tip_now_ipad = self.ipad_pose_T.inv()*tip_now
             # get current desired position
             q_planned=frac*q_all[seg]+(1-frac)*q_all[seg-1]
             T_planned=self.robot.fwd(q_planned)
@@ -287,21 +321,6 @@ class MotionController(object):
             frac=(time.time()-start_time-time_bp[seg-1])/(time_bp[seg]-time_bp[seg-1])
             self.position_cmd(frac*q_all[seg]+(1-frac)*q_all[seg-1])
 
-    def position_cmd(self,q):
-
-        # Increment command_seqno
-        self.command_seqno += 1
-        # Create Fill the RobotJointCommand structure
-        joint_cmd = self.RobotJointCommand()
-        joint_cmd.seqno = self.command_seqno # Strictly increasing command_seqno
-        joint_cmd.state_seqno = self.robot_state.InValue.seqno # Send current robot_state.seqno as failsafe
-        
-        # Set the joint command
-        joint_cmd.command = q
-
-        # Send the joint command to the robot
-        self.cmd_w.SetOutValueAll(joint_cmd)
-
 def main():
     # img_name='wen_out'
     # img_name='strokes_out'
@@ -341,7 +360,6 @@ def main():
     
     ######## Motion Controller ###
     mctrl = MotionController(robot,ipad_pose,H_pentip2ati,controller_params)
-    mctrl.connect_position_mode()
 
     start=True
     ft_record_load=[]
