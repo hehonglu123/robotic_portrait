@@ -69,7 +69,6 @@ while True:
     # plt.imshow(image_vis+image_viz_boarder, cmap='gray')
     # plt.show()
     
-    
     plt.imshow(image_vis+image_skeleton, cmap='gray')
     plt.show()
 
@@ -153,20 +152,20 @@ while True:
     nx.draw(graph, draw_graph_pos, **options)
     plt.show()
     
-    # # find subgraphs
-    # subgraphs = [graph.subgraph(c).copy() for c in nx.connected_components(graph)]
-    # total_g=len(subgraphs)
-    # all_paths=[]
-    # count=1
-    # for subg in subgraphs:    
-    #     print("graph: ",count,"/",total_g," nodes: ",subg.number_of_nodes(), " edges: ", subg.number_of_edges())
-    #     if subg.number_of_nodes()<min_stroke_length:
-    #         print("length too short")
-    #         continue
-    #     draw_path = nx.approximation.traveling_salesman_problem(subg, cycle=False)
-    #     all_paths.append(draw_path)
-    #     count+=1
-    # print("End tsp...")
+    # find subgraphs
+    subgraphs = [graph.subgraph(c).copy() for c in nx.connected_components(graph)]
+    total_g=len(subgraphs)
+    all_paths=[]
+    count=1
+    for subg in subgraphs:    
+        print("graph: ",count,"/",total_g," nodes: ",subg.number_of_nodes(), " edges: ", subg.number_of_edges())
+        if subg.number_of_nodes()<min_stroke_length:
+            print("length too short")
+            continue
+        draw_path = nx.approximation.traveling_salesman_problem(subg, cycle=False)
+        all_paths.append(draw_path)
+        count+=1
+    print("End tsp...")
     
     count+=1
 strokes = strokes_split
