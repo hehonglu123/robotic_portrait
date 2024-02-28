@@ -97,7 +97,7 @@ class MotionController(object):
             # Send the joint command to the robot
             self.cmd_w.SetOutValueAll(joint_cmd)
         else:
-            self.egm.send_to_robot(q)
+            self.egm.send_to_robot(np.degrees(q))
     
     def read_position(self):
         if USE_RR_ROBOT:
@@ -106,7 +106,7 @@ class MotionController(object):
             res, state = self.egm.receive_from_robot(timeout=0.1)
             if not res:
                 raise Exception("Robot communication lost")
-            return state.joint_angles
+            return np.radians(state.joint_angles)
     
     def wrench_wire_cb(self,w,value,time):
 

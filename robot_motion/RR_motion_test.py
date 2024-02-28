@@ -1,6 +1,7 @@
 from RobotRaconteur.Client import *
 import numpy as np
 import time
+from matplotlib import pyplot as plt
 
 ##RR PARAMETERS
 RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
@@ -23,17 +24,20 @@ cmd_w = RR_robot_sub.SubscribeWire("position_command")
 command_seqno = 0
 min_delta = -np.radians(10)
 max_delta = np.radians(10)
-joint_vel = np.radians(5)
+joint_vel = np.radians(8)
 dt = 0.004
 initial_q = robot_state.InValue.joint_position
 dt_actual = []
+joint_actual = []
 print("Start testing")
 while True:
     try:
         st = time.time()
+        time.sleep(dt)
         q_now = robot_state.InValue.joint_position
         q_next = q_now + np.array([0,0,0,0,0,joint_vel*dt])
         if q_next[5] >= initial_q[5]+max_delta or q_next[5] <= initial_q[5]+min_delta:
+            print("change direction")
             joint_vel = -joint_vel
         
         command_seqno+=1
@@ -41,10 +45,16 @@ while True:
         cmd.seqno = command_seqno
         cmd.state_seqno = robot_state.InValue.seqno
         cmd.command = q_next
-        cmd_w.OutValue.SetOutValueAll(cmd)
+        cmd_w.SetOutValueAll(cmd)
         dt_actual.append(time.time()-st)
+        joint_actual.append(q_now[5])
     except KeyboardInterrupt:
         break
 print("Average time: ", np.mean(dt_actual))
 print("Aveerage of 10 Longest time:", np.mean(np.sort(dt_actual)[-10:]))
 print("Aveerage of 10 Shortest time:", np.mean(np.sort(dt_actual)[:10]))
+joint_vel_exec = np.diff(np.degrees(joint_actual))/dt_actual[1:]
+plt.plot(joint_vel_exec)
+plt.show()
+for i in range(1000,2000):
+    print("Joint actual:",i, joint_actual[i])
