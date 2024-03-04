@@ -12,11 +12,14 @@ import networkx as nx
 
 # img_name = 'wen_name_out'
 # img_name = 'eric_name_out'
-img_name = 'new_year_out'
+# img_name = 'new_year_out'
+# img_name = 'ilc_path2'
+img_name = 'yong'
 img_dir = '../imgs/'
 
 edge_connection_thres=80
 save_paths = True
+connect_edges = False
 
 # Read image
 image_path = Path(img_dir+img_name+'.png')
@@ -132,12 +135,13 @@ for i in range(len(white_pix_arr)):
     for direction in directions:
         if (white_pix_arr[i]+direction).tolist() in white_pix_arr.tolist():
             graph.add_edge((white_pix_arr[i][0],white_pix_arr[i][1]),tuple(white_pix_arr[i]+direction),weight=np.linalg.norm(direction))
-# for i in range(len(edges)):
-#     for j in range(i+1,len(edges)):
-#         dist = np.sqrt((edges[i][0]-edges[j][0])**2 + (edges[i][1]-edges[j][1])**2)
-#         graph.add_edge((edges[i][0],edges[i][1]),(edges[j][0],edges[j][1]),weight=dist*2)
-#         if dist<edge_connection_thres:
-#             graph.add_edge((edges[i][0],edges[i][1]),(edges[j][0],edges[j][1]),weight=dist*2)
+if connect_edges:
+    for i in range(len(edges)):
+        for j in range(i+1,len(edges)):
+            dist = np.sqrt((edges[i][0]-edges[j][0])**2 + (edges[i][1]-edges[j][1])**2)
+            graph.add_edge((edges[i][0],edges[i][1]),(edges[j][0],edges[j][1]),weight=dist*2)
+            if dist<edge_connection_thres:
+                graph.add_edge((edges[i][0],edges[i][1]),(edges[j][0],edges[j][1]),weight=dist*2)
 graph.remove_nodes_from(list(nx.isolates(graph)))
 print("Total nodes: ", graph.number_of_nodes(), "Total edges: ", graph.number_of_edges())
 
@@ -169,20 +173,20 @@ for subg in all_graphs:
 print("End tsp...")
 
 ## solve tsp to connect all subgraphs
-print("Start tsp for all graphs...")
-g_all = nx.DiGraph()
-draw_graph_pos={}
-for i in range(len(all_graphs)):
-    for j in range(len(all_graphs)):
-        if i==j:
-            continue
-        dist = np.linalg.norm(np.array(path_ends[i])-np.array(path_starts[j]))
-        g_all.add_edge(i,j,weight=dist)
-        draw_graph_pos[i]=((path_starts[i][0]+path_ends[i][0])/2,(path_starts[i][1]+path_ends[i][1])/2)
-print("Total nodes: ", g_all.number_of_nodes(), "Total edges: ", g_all.number_of_edges())
-draw_path_connect = nx.approximation.traveling_salesman_problem(g_all, cycle=False)
-print(draw_path_connect)
-exit()
+# print("Start tsp for all graphs...")
+# g_all = nx.DiGraph()
+# draw_graph_pos={}
+# for i in range(len(all_graphs)):
+#     for j in range(len(all_graphs)):
+#         if i==j:
+#             continue
+#         dist = np.linalg.norm(np.array(path_ends[i])-np.array(path_starts[j]))
+#         g_all.add_edge(i,j,weight=dist)
+#         draw_graph_pos[i]=((path_starts[i][0]+path_ends[i][0])/2,(path_starts[i][1]+path_ends[i][1])/2)
+# print("Total nodes: ", g_all.number_of_nodes(), "Total edges: ", g_all.number_of_edges())
+# draw_path_connect = nx.approximation.traveling_salesman_problem(g_all, cycle=False)
+# print(draw_path_connect)
+# exit()
 strokes_split = []
 for i in range(len(all_paths)):
     stroke=[]
@@ -202,8 +206,9 @@ if save_paths:
     cv2.imwrite('../imgs/'+img_name+'_resized.png', image_thresh)
 
 image_out = np.ones_like(image_thresh_flip)*255
-for n in draw_path:
-    print(n)
-    image_out = cv2.circle(image_out, n, round(graph.nodes[n]['width']), 0, -1)
-    cv2.imshow("Image", image_out)
-    cv2.waitKey(0)
+for draw_subpath in all_paths:
+    for n in draw_subpath:
+        print(n)
+        image_out = cv2.circle(image_out, n, round(graph.nodes[n]['width']), 0, -1)
+        cv2.imshow("Image", image_out)
+        cv2.waitKey(0)

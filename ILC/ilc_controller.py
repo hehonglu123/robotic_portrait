@@ -40,6 +40,8 @@ class MotionILController(object):
         # pose relationship
         self.ipad_pose=ipad_pose
         self.ipad_pose_T = Transform(self.ipad_pose[:3,:3],self.ipad_pose[:3,-1])
+        self.ipad_pose_inv_T = self.ipad_pose_T.inv()
+        self.ad_ipad2base = adjoint_map(self.ipad_pose_T.inv())
         self.H_pentip2ati=H_pentip2ati
         self.H_ati2pentip=np.linalg.inv(H_pentip2ati)
         self.ad_ati2pentip=adjoint_map(Transform(self.H_ati2pentip[:3,:3],self.H_ati2pentip[:3,-1]))
@@ -75,6 +77,7 @@ class MotionILController(object):
             self.egm = EGM()
   
         self.TIMESTEP = 0.004 # egm timestep 4 ms
+        self.params['lookahead_index'] = int(self.params['lookahead_time']/self.TIMESTEP)
         
     def connect_position_mode(self):
      
@@ -176,7 +179,37 @@ class MotionILController(object):
         
         return ft_record
    
-    def trajectory_generate(self,curve_js,force_path):
+    def motion_start_procedure(self, js_start, f_start, h_offset, h_offset_low):
+        
+        # jog to start point
+        pose_start=self.robot.fwd(js_start)
+        #arc-like trajectory to next segment
+        p_start=pose_start.p+h_offset*self.ipad_pose[:3,-2]
+        q_start=self.robot.inv(p_start,pose_start.R,js_start)[0]
+        pose_cur=self.robot.fwd(self.read_position())
+        p_mid=(pose_start.p+pose_cur.p)/2+h_offset*self.ipad_pose[:3,-2]
+        q_mid=self.robot.inv(p_mid,pose_start.R,js_start)[0]
+        self.trajectory_position_cmd(np.vstack((self.read_position(),q_mid,q_start)),v=0.2)
+        p_start=pose_start.p+h_offset_low*self.ipad_pose[:3,-2]
+        q_start=self.robot.inv(p_start,pose_start.R,js_start)[0]
+        self.jog_joint_position_cmd(q_start,wait_time=0.5)
+        # set tare before load force
+        self.RR_ati_cli.setf_param("set_tare", RR.VarValue(True, "bool"))
+        if SHOW_STATUS:
+            input("Set tare. Start load force?")
+        # load force
+        ft_record=self.force_load_z(f_start)
+        
+        return ft_record
+    
+    def motion_end_procedure(self, js_end, h_offset):
+        # jog to end point z+hoffset
+        pose_end=self.robot.fwd(js_end)
+        p_end=pose_end.p+h_offset*self.ipad_pose[:3,-2]
+        q_end=self.robot.inv(p_end,pose_end.R,js_end)[0]
+        self.jog_joint_position_cmd(q_end,wait_time=0.5)
+    
+    def trajectory_generate(self,curve_js,curve_xy,force_path):
     
         # Calculate the path length
         lam = calc_lam_js(curve_js, self.robot)
@@ -215,7 +248,9 @@ class MotionILController(object):
         num_steps = int(time_bp[-1] / self.TIMESTEP)
 
         # Initialize the trajectory list
-        trajectory = []
+        traj_q = []
+        traj_xy = []
+        traj_fz = []
 
         # Generate the trajectory
         for step in range(num_steps):
@@ -231,98 +266,81 @@ class MotionILController(object):
             # Calculate the fraction of time within the current segment
             frac = (current_time - time_bp[seg]) / (time_bp[seg+1] - time_bp[seg])
             
-            # Calculate the desired position for the current step
+            # Calculate the desired joint position for the current step
             q_des = frac * curve_js[seg+1] + (1 - frac) * curve_js[seg]
+            # Calculate the desired position for the current step
+            xy_des = frac * curve_xy[seg+1] + (1 - frac) * curve_xy[seg]
             # Calculate the desired force for the current step
             fz_des = frac * force_path[seg+1] + (1 - frac) * force_path[seg]
             
             # Append the desired position to the trajectory
-            trajectory.append(np.append(q_des, fz_des))
+            traj_q.append(q_des)
+            traj_xy.append(xy_des)
+            traj_fz.append(fz_des)
         
-        return trajectory, time_bp
+        return traj_q, traj_xy, traj_fz, time_bp
    
-    def trajectory_force_control(self,q_all,fz_des):
-
-        # transform to tip desired
-        fz_des = fz_des*(-1)
-        # check if fz_des is a number or list
-        if isinstance(fz_des,(int,float)):
-            fz_des = np.ones(len(q_all))*fz_des
-    
-        # get path length
-        lam = calc_lam_js(q_all,self.robot)
-
-        # get trajectory and time_bp
-        trajectory_t, time_bp = self.trajectory_generate(q_all,fz_des)
+    def trajectory_force_PIDcontrol(self,traj_xy,traj_fz,force_lookahead=False):
+        
+        assert len(traj_xy)==len(traj_fz), "trajectory length mismatch"
         
         ### trajectory force control
-        seg=1
         start_time=time.time()
-        dt=0.004
-        current_time=None
-        ft_record=[]
-        while time.time()-start_time<time_bp[-1]:
+        joint_force_exe=[]
+        cart_force_exe=[]
+        for i in range(len(traj_xy)):
             # joint reading
-            q_now = self.robot_state.InValue.joint_position
+            q_now = self.read_position()
             tip_now = self.robot.fwd(q_now)
             tip_now_ipad = self.ipad_pose_T.inv()*tip_now
             # read force
             ft_tip = self.ad_ati2pentip_T@self.ft_reading
             fz_now = float(ft_tip[-1])
-            
-            ### get dt
-            if current_time is not None:
-                dt = time.time()-current_time
-            current_time=time.time()
-            current_time_lookahead = current_time+self.params['lookahead_time']
-            
-            ### find current segment
-            if current_time-start_time>time_bp[seg]:
-                seg+=1
-            if seg==len(q_all):
-                break
-            frac=(current_time-start_time-time_bp[seg-1])/(time_bp[seg]-time_bp[seg-1])
-            ### find lookahead segment
-            if current_time_lookahead-start_time>time_bp[seg]:
-                seg_lookahead=seg+1
-            else:
-                seg_lookahead=seg
-            
-            if seg_lookahead<len(q_all):
-                frac_lookahead=(current_time_lookahead-start_time-time_bp[seg_lookahead-1])/(time_bp[seg_lookahead]-time_bp[seg_lookahead-1])
-            else:
-                seg_lookahead=seg
-                frac_lookahead=frac
-            
-            ### force feedback control
-            # get current desired force
-            fz_des_now = frac*fz_des[seg]+(1-frac)*fz_des[seg-1]
-            fz_des_lookahead = frac_lookahead*fz_des[seg_lookahead]+(1-frac_lookahead)*fz_des[seg_lookahead-1]
-            # f_err = fz_des_now-fz_now # feedback error
-            f_err = fz_des_lookahead-fz_now # feedback error lookahead
-            v_des_z = self.force_impedence_ctrl(f_err) # force control
             if np.linalg.norm(ft_tip[3:])>FORCE_PROTECTION: # force protection break
                 print("force: ",ft_tip[3:])
                 print("force too large")
                 break
             
-            ### positoin control
+            ### force feedback control
+            # get current desired force
+            if force_lookahead:
+                fz_des = traj_fz[min(i+self.params['lookahead_index'],len(traj_fz)-1)]
+            else:
+                fz_des = traj_fz[i]
+            f_err = fz_des-fz_now # feedback error lookahead
+            v_des_z = self.force_impedence_ctrl(f_err) # force control
+            ### get v_des
+            v_des_xy = (traj_xy[i]-tip_now_ipad.p[:2])/self.TIMESTEP # desired xy velocity
+            v_des = np.append(v_des_xy, v_des_z)
+            nu_des = np.append(0,v_des)
+            nu_des_base = self.ad_ipad2base@nu_des
+            ### get Jacobian 
+            J = self.robot.jacobian(q_now)
+            # Joint position control
+            qd_des = np.linalg.pinv(J)@nu_des_base
+            q_des = q_now + qd_des*self.TIMESTEP
+            
+            ### position control
             # get current desired position
-            q_planned=frac*q_all[seg]+(1-frac)*q_all[seg-1]
-            T_planned=self.robot.fwd(q_planned)
-            T_planned_ipad=self.ipad_pose_T.inv()*T_planned
-            # add force control
-            T_planned_ipad.p[2] = tip_now_ipad.p[2] + v_des_z * dt # force impedence control
-            T_planned=self.ipad_pose_T*T_planned_ipad
-            q_des = self.robot.inv(T_planned.p,T_planned.R,q_now)[0]
+            # q_planned=traj_q[i]
+            # T_planned=self.robot.fwd(q_planned)
+            # T_planned_ipad=self.ipad_pose_T.inv()*T_planned
+            # # add force control
+            # v_des = (T_planned_ipad.p-tip_now_ipad.p)/self.TIMESTEP + np.array([0,0,v_des_z]) # force impedence control
+            # # Cartesian position control
+            # T_planned_ipad.p = tip_now_ipad.p + v_des * self.TIMESTEP
+            # T_planned=self.ipad_pose_T*T_planned_ipad
+            # q_des = self.robot.inv(T_planned.p,T_planned.R,q_now)[0]
 
             ### send robot position command
             self.position_cmd(q_des)
             
             # time, force, joint angle, record
-            ft_record.append(np.append(np.array([time.time(),fz_now]),np.degrees(q_now)))
+            joint_force_exe.append(np.append(np.array([time.time()-start_time,fz_now]),q_now))
+            # time, force, xyz, record
+            cart_force_exe.append(np.append(np.array([time.time()-start_time,fz_now]),tip_now_ipad.p))
             
-        return ft_record
+        return joint_force_exe, cart_force_exe
     
     def jog_joint_position_cmd(self,q,v=0.4,wait_time=0):
 
@@ -398,6 +416,11 @@ def main():
     
     ######## Motion Controller ###
     mctrl = MotionILController(robot,ipad_pose,H_pentip2ati,controller_params)
+    # parameters
+    h_offset = 20
+    h_offset_low = 1
+    iteration_N = 10
+    alpha = 0.5
 
     start=True
     ft_record_load=[]
@@ -405,70 +428,62 @@ def main():
     for i in range(0,num_segments):
         print('Segment %i'%i)
         # pixel_path=np.loadtxt('path/pixel_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,3))
-        # cartesian_path=np.loadtxt('path/cartesian_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,3))
+        cartesian_path=np.loadtxt('path/cartesian_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,3))
         curve_js=np.loadtxt('path/js_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,6))
         force_path=np.loadtxt('path/force_path/'+img_name+'/%i.csv'%i,delimiter=',')
         
         # constant force
         # force_path = np.ones(len(curve_js))*F_des
-
-        if len(curve_js)>1:
-
-            pose_start=robot.fwd(curve_js[0])
-            h_offset = 20
-            h_offset_low = 1
-            if start:
-                
-                #jog to starting point
-                p_start=pose_start.p+h_offset*ipad_pose[:3,-2]
-                q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
-                mctrl.jog_joint_position_cmd(q_start,wait_time=0.5)
-                p_start=pose_start.p+h_offset_low*ipad_pose[:3,-2]
-                q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
-                mctrl.jog_joint_position_cmd(q_start,wait_time=0.5)
-                # set tare before load force
-                mctrl.RR_ati_cli.setf_param("set_tare", RR.VarValue(True, "bool"))
-                if SHOW_STATUS:
-                    input("Set tare. Start load force?")
-                # load force
-                ft_record = mctrl.force_load_z(force_path[0])
-                # clear bias
-                start=False
-            else:
-                #arc-like trajectory to next segment
-                p_start=pose_start.p+h_offset*ipad_pose[:3,-2]
-                q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
-                pose_cur=robot.fwd(mctrl.robot_state.InValue.joint_position)
-                p_mid=(pose_start.p+pose_cur.p)/2+h_offset*ipad_pose[:3,-2]
-                q_mid=robot.inv(p_mid,pose_start.R,curve_js[0])[0]
-                mctrl.trajectory_position_cmd(np.vstack((mctrl.robot_state.InValue.joint_position,q_mid,q_start)),v=0.2)
-                #jog to starting point
-                mctrl.jog_joint_position_cmd(q_start,wait_time=0.3)
-                p_start=pose_start.p+h_offset_low*ipad_pose[:3,-2]
-                q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
-                mctrl.jog_joint_position_cmd(q_start,wait_time=0.5)
-                # set tare before load force
-                mctrl.RR_ati_cli.setf_param("set_tare", RR.VarValue(True, "bool"))
-                if SHOW_STATUS:
-                    input("Set tare. Start load force?")
-                # load force
-                ft_record=mctrl.force_load_z(force_path[0])
+        if len(curve_js)<2:
+            continue
+        
+        ######## ILC #########################
+        # transform to tip desired
+        fz_des = force_path*(-1)
+        # check if fz_des is a number or list
+        if isinstance(fz_des,(int,float)):
+            fz_des = np.ones(len(curve_js))*fz_des
+        # get xy
+        curve_xy = np.array([mctrl.ipad_pose_inv_T.R*robot.fwd(q).p+mctrl.ipad_pose_inv_T.p for q in curve_js])
+        # get path length
+        lam = calc_lam_js(curve_js,mctrl.robot)
+        # get trajectory and time_bp
+        traj_q, traj_xy, traj_fz, time_bp = mctrl.trajectory_generate(curve_js,curve_xy,fz_des)
+        
+        traj_xy_input = deepcopy(traj_xy)
+        traj_fz_input = deepcopy(traj_fz)
+        for iter_n in range(iteration_N):
+            if SHOW_STATUS:
+                input("Start iteration %i?"%iter_n)
+            ## first half
+            mctrl.motion_start_procedure(curve_js[0],force_path[0],h_offset,h_offset_low)
+            joint_force_exe, cart_force_exe = mctrl.trajectory_force_PIDcontrol(traj_xy_input,traj_fz_input,force_lookahead=False)
+            mctrl.motion_end_procedure(curve_js[-1],h_offset)
             
-            ft_record_load.append(ft_record)
+            ## get error
+            curve_xy_exe = cart_force_exe[:,-2:]
+            curve_f_exe = cart_force_exe[:,1]
+            error_exe = np.hstack((curve_xy-curve_xy_exe,fz_des.reshape(-1,1)-curve_f_exe.reshape(-1,1)))
 
-            #drawing trajectory
-            print("Travel trajectory")
-            # constant force profile
-            # ft_record=mctrl.trajectory_force_control(curve_js,F_des)
-            # with path force profile
-            ft_record=mctrl.trajectory_force_control(curve_js,force_path)
-            ft_record_move.append(ft_record)
-
-            # jog to end point z+hoffset
-            pose_end=robot.fwd(curve_js[-1])
-            p_end=pose_end.p+h_offset*ipad_pose[:3,-2]
-            q_end=robot.inv(p_end,pose_end.R,curve_js[-1])[0]
-            mctrl.jog_joint_position_cmd(q_end,wait_time=0.5)
+            print("Iteration %i, motion xy Error: %f"%(iter_n, np.linalg.norm(error_exe[:,:-1])))
+            print("Iteration %i, force Error: %f"%(iter_n, np.linalg.norm(error_exe[:,-1])))
+            
+            ## second half
+            error_exe_flip = np.flip(error_exe,axis=0)
+            traj_xy_auginput = traj_xy_input - error_exe_flip[:,:-1]
+            traj_fz_auginput = traj_fz_input - error_exe_flip[:,-1]
+            mctrl.motion_start_procedure(curve_js[0],force_path[0],h_offset,h_offset_low)
+            joint_force_exe, cart_force_exe = mctrl.trajectory_force_PIDcontrol(traj_xy_auginput,traj_fz_auginput,force_lookahead=False)
+            mctrl.motion_end_procedure(curve_js[-1],h_offset)
+            
+            # get gradient
+            delta_xy = cart_force_exe[:,-2:]-curve_xy_exe
+            delta_fz = cart_force_exe[:,1]-curve_f_exe
+            G_error_flip = np.hstack((delta_xy,delta_fz.reshape(-1,1)))
+            G_error = np.flip(G_error_flip,axis=0)
+            traj_xy_input = traj_xy_input - alpha*G_error[:,:-1]
+            traj_fz_input = traj_fz_input - alpha*G_error[:,-1]
+        ####################################
     
     #jog to end point
     pose_end=robot.fwd(curve_js[-1])
