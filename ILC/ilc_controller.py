@@ -17,7 +17,7 @@ from utils import *
 
 FORCE_PROTECTION = 5  # Force protection. Units: N
 SHOW_STATUS = False
-PROGRESS_VIZ = True
+PROGRESS_VIZ = False
 
 USE_RR_ROBOT = False
 
@@ -114,6 +114,11 @@ class MotionILController(object):
                 raise Exception("Robot communication lost")
             return np.radians(state.joint_angles)
     
+    def drain_egm(self, read_N):
+
+        for i in range(read_N):
+            self.read_position()
+    
     def wrench_wire_cb(self,w,value,time):
 
         self.ft_reading = np.array([value['torque']['x'],value['torque']['y'],value['torque']['z'],value['force']['x'],value['force']['y'],value['force']['z']])
@@ -124,8 +129,8 @@ class MotionILController(object):
 
     def force_load_z(self,fz_des):
 
-        # transform to tip desired
-        fz_des = fz_des*(-1)
+        # # transform to tip desired
+        # fz_des = fz_des*(-1)
 
         touch_t = None
         this_st=None
@@ -182,7 +187,7 @@ class MotionILController(object):
         
         return ft_record
    
-    def motion_start_procedure(self, js_start, f_start, h_offset, h_offset_low):
+    def motion_start_procedure(self, js_start, f_start, h_offset, h_offset_low, lin_vel=2):
         
         # jog to start point
         pose_start=self.robot.fwd(js_start)
@@ -192,46 +197,53 @@ class MotionILController(object):
         pose_cur=self.robot.fwd(self.read_position())
         p_mid=(pose_start.p+pose_cur.p)/2+h_offset*self.ipad_pose[:3,-2]
         q_mid=self.robot.inv(p_mid,pose_start.R,js_start)[0]
-        self.trajectory_position_cmd(np.vstack((self.read_position(),q_mid,q_start)),v=0.2)
+        self.trajectory_position_cmd(np.vstack((self.read_position(),q_mid,q_start)),v=lin_vel)
         p_start=pose_start.p+h_offset_low*self.ipad_pose[:3,-2]
         q_start=self.robot.inv(p_start,pose_start.R,js_start)[0]
-        self.jog_joint_position_cmd(q_start,wait_time=0.5)
+        self.jog_joint_position_cmd(q_start,v=lin_vel,wait_time=0.5)
         # set tare before load force
         self.RR_ati_cli.setf_param("set_tare", RR.VarValue(True, "bool"))
         if SHOW_STATUS:
             input("Set tare. Start load force?")
+        print("Start load force")
         # load force
         ft_record=self.force_load_z(f_start)
+        print("Load force done")
         
         return ft_record
     
-    def motion_end_procedure(self, js_end, h_offset):
+    def motion_end_procedure(self, js_end, h_offset, lin_vel=2):
         # jog to end point z+hoffset
         pose_end=self.robot.fwd(js_end)
         p_end=pose_end.p+h_offset*self.ipad_pose[:3,-2]
         q_end=self.robot.inv(p_end,pose_end.R,js_end)[0]
-        self.jog_joint_position_cmd(q_end,wait_time=0.5)
+        self.jog_joint_position_cmd(q_end,v=lin_vel,wait_time=0.5)
     
-    def trajectory_generate(self,curve_js,curve_xy,force_path):
+    def trajectory_generate(self,curve_js,curve_xy,force_path,lin_vel=None,lin_acc=None):
     
+        # velocity and acceleration
+        if lin_vel is None:
+            lin_vel = self.params['moveL_speed_lin']
+        if lin_acc is None:
+            lin_acc = self.params['moveL_acc_lin']
         # Calculate the path length
         lam = calc_lam_js(curve_js, self.robot)
         
         # find the time for each segment, with acceleration and deceleration
-        if len(lam)>2:
+        if len(lam)>2 and lin_acc>0:
             time_bp = np.zeros_like(lam)
-            acc = self.params['moveL_acc_lin']
+            acc = lin_acc
             vel = 0
             for i in range(0,len(lam)):
-                if vel>=self.params['moveL_speed_lin']:
-                    time_bp[i] = time_bp[i-1]+(lam[i]-lam[i-1])/self.params['moveL_speed_lin']
+                if vel>=lin_vel:
+                    time_bp[i] = time_bp[i-1]+(lam[i]-lam[i-1])/lin_vel
                 else:
                     time_bp[i] = np.sqrt(2*lam[i]/acc)
                     vel = acc*time_bp[i]
             time_bp_half = []
             vel = 0
             for i in range(len(lam)-1,-1,-1):
-                if vel>=self.params['moveL_speed_lin'] or i<=len(lam)/2:
+                if vel>=lin_vel or i<=len(lam)/2:
                     break
                 else:
                     time_bp_half.append(np.sqrt(2*(lam[-1]-lam[i])/acc))
@@ -239,13 +251,13 @@ class MotionILController(object):
             time_bp_half = np.array(time_bp_half)[::-1]
             time_bp_half = time_bp_half*-1+time_bp_half[0]
             time_bp[-len(time_bp_half):] = time_bp[-len(time_bp_half)-1]+time_bp_half\
-                +(lam[-len(time_bp_half)]-lam[-len(time_bp_half)-1])/self.params['moveL_speed_lin']
+                +(lam[-len(time_bp_half)]-lam[-len(time_bp_half)-1])/lin_vel
             if SHOW_STATUS:
                 plt.plot(time_bp,lam)
                 plt.show()
             ###
         else:
-            time_bp = lam/self.params['moveL_speed_lin']
+            time_bp = lam/lin_vel
         
         # Calculate the number of steps for the trajectory
         num_steps = int(time_bp[-1] / self.TIMESTEP)
@@ -281,7 +293,7 @@ class MotionILController(object):
             traj_xy.append(xy_des)
             traj_fz.append(fz_des)
         
-        return traj_q, traj_xy, traj_fz, time_bp
+        return np.array(traj_q), np.array(traj_xy), np.array(traj_fz), np.array(time_bp)
    
     def trajectory_force_PIDcontrol(self,traj_xy,traj_js,traj_fz,force_lookahead=False):
         
@@ -350,55 +362,56 @@ class MotionILController(object):
             # time, force, xyz, record
             cart_force_exe.append(np.append(np.array([time.time()-start_time,fz_now]),tip_now_ipad.p))
             
-        return joint_force_exe, cart_force_exe
+        return np.array(joint_force_exe), np.array(cart_force_exe)
     
     def jog_joint_position_cmd(self,q,v=0.4,wait_time=0):
 
-        q_start=self.robot_state.InValue.joint_position
+        q_start=self.read_position()
         total_time=np.linalg.norm(q-q_start)/v
+        q_all = np.vstack((q_start,q))
+        traj_q, traj_xy, traj_fz, time_bp=self.trajectory_generate(q_all,np.zeros_like(q_all),np.zeros_like(q_all),lin_vel=v)
 
-        start_time=time.time()
-        while time.time()-start_time<total_time:
-            # Set the joint command
-            frac=(time.time()-start_time)/total_time
-            self.position_cmd(frac*q+(1-frac)*q_start)
+        for i in range(len(traj_q)):
+            self.read_position()
+            self.position_cmd(traj_q[i])
+            if USE_RR_ROBOT:
+                time.sleep(self.TIMESTEP)
+
+        # start_time=time.time()
+        # while time.time()-start_time<total_time:
+        #     # Set the joint command
+        #     frac=(time.time()-start_time)/total_time
+        #     self.position_cmd(frac*q+(1-frac)*q_start)
             
         ###additional points for accuracy
         start_time=time.time()
         while time.time()-start_time<wait_time:
+            self.read_position()
             self.position_cmd(q)
     
     def trajectory_position_cmd(self,q_all,v=0.4):
 
-        lamq_bp=[0]
-        for i in range(len(q_all)-1):
-            lamq_bp.append(lamq_bp[-1]+np.linalg.norm(q_all[i+1]-q_all[i]))
-        time_bp=np.array(lamq_bp)/v
-        seg=1
 
-        start_time=time.time()
-        while time.time()-start_time<time_bp[-1]:
+        traj_q, traj_xy, traj_fz, time_bp=self.trajectory_generate(q_all,np.zeros_like(q_all),np.zeros_like(q_all),lin_vel=v,lin_acc=0)
 
-            #find current segment
-            if time.time()-start_time>time_bp[seg]:
-                seg+=1
-            if seg==len(q_all):
-                break
-            frac=(time.time()-start_time-time_bp[seg-1])/(time_bp[seg]-time_bp[seg-1])
-            self.position_cmd(frac*q_all[seg]+(1-frac)*q_all[seg-1])
+        for i in range(len(traj_q)):
+            self.read_position()
+            self.position_cmd(traj_q[i])
+            if USE_RR_ROBOT:
+                time.sleep(self.TIMESTEP)
 
 def main():
     # img_name='wen_out'
     # img_name='strokes_out'
     # img_name='strokes_out_3'
-    img_name='wen_name_out'
+    # img_name='wen_name_out'
     # img_name='me_out'
     # img_name='new_year_out'
+    img_name='ilc_path2'
 
     visualize=False
 
     print("Drawing %s"%img_name)
-    time.sleep(1)
 
     ipad_pose=np.loadtxt(CODE_PATH+'config/ipad_pose.csv',delimiter=',')
     ipad_pose_inv = np.linalg.inv(ipad_pose)
@@ -413,34 +426,41 @@ def main():
  
     ######## Controller parameters ###
     controller_params = {
-        "force_ctrl_damping": 180.0,
+        "force_ctrl_damping": 60.0, # 180, 90, 60
         "force_epsilon": 0.1, # Unit: N
-        "moveL_speed_lin": 3.0, # Unit: mm/sec
+        "moveL_speed_lin": 6.0, # Unit: mm/sec
         "moveL_acc_lin": 1.0, # Unit: mm/sec^2
         "moveL_speed_ang": np.radians(10), # Unit: rad/sec
         "trapzoid_slope": 1, # trapzoidal load profile. Unit: N/sec
         "load_speed": 10.0, # Unit mm/sec
         "unload_speed": 1.0, # Unit mm/sec
         'settling_time': 1, # Unit: sec
-        "lookahead_time": 0.02 # Unit: sec
+        "lookahead_time": 0.132 # Unit: sec
         }
     
     ######## Motion Controller ###
     mctrl = MotionILController(robot,ipad_pose,H_pentip2ati,controller_params)
+    # time.sleep(1)
+    mctrl.drain_egm(1000)
+
     # parameters
     h_offset = 20
     h_offset_low = 1
-    force_smooth_n = 1
+    joging_speed = 15
+    force_smooth_n = 11
     motion_smooth_n = 1
     
-    iteration_N = 10
-    alpha = 0.5
+    iteration_N = 100
+    alpha = 0.25
+    use_lookahead = False
     motion_ilc = True
     force_ilc = True
 
-    start=True
+    # record data
+    Path(CODE_PATH+'record').mkdir(parents=True, exist_ok=True)
     ft_record_load=[]
     ft_record_move=[]
+
     for i in range(0,num_segments):
         print('Segment %i'%i)
         # pixel_path=np.loadtxt('path/pixel_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,3))
@@ -474,51 +494,34 @@ def main():
                 input("Start iteration %i?"%iter_n)
             print("Iteration %i"%iter_n)
             ## first half
-            mctrl.motion_start_procedure(curve_js[0],force_path[0],h_offset,h_offset_low)
-            joint_force_exe, cart_force_exe = mctrl.trajectory_force_PIDcontrol(traj_xy_input,traj_q,traj_fz_input,force_lookahead=False)
-            mctrl.motion_end_procedure(curve_js[-1],h_offset)
+            print("First half")
+            mctrl.motion_start_procedure(traj_q[0],traj_fz_input[0],h_offset,h_offset_low,lin_vel=joging_speed)
+            joint_force_exe, cart_force_exe = mctrl.trajectory_force_PIDcontrol(traj_xy_input,traj_q,traj_fz_input,force_lookahead=use_lookahead)
+            mctrl.motion_end_procedure(traj_q[-1],h_offset, lin_vel=joging_speed)
             
-            curve_xy_exe = cart_force_exe[:,-2:]
+            curve_xy_exe = cart_force_exe[:,-3:-1]
             curve_f_exe = cart_force_exe[:,1]
             # moving average to smooth executed force and xy
-            curve_xy_exe[:,0] = moving_average(curve_xy_exe[:,0], n=motion_smooth_n, padding=False)
-            curve_xy_exe[:,1] = moving_average(curve_xy_exe[:,1], n=motion_smooth_n, padding=False)
-            curve_f_exe = moving_average(curve_f_exe, n=force_smooth_n, padding=False)
+            curve_xy_exe[:,0] = moving_average(curve_xy_exe[:,0], n=motion_smooth_n, padding=True)
+            curve_xy_exe[:,1] = moving_average(curve_xy_exe[:,1], n=motion_smooth_n, padding=True)
+            curve_f_exe = moving_average(curve_f_exe, n=force_smooth_n, padding=True)
             ## get error
-            error_exe = np.hstack((curve_xy-curve_xy_exe,fz_des.reshape(-1,1)-curve_f_exe.reshape(-1,1)))
+            error_exe = np.hstack((traj_xy-curve_xy_exe,traj_fz.reshape(-1,1)-curve_f_exe.reshape(-1,1)))
 
             print("Iteration %i, motion xy Error: %f"%(iter_n, np.linalg.norm(error_exe[:,:-1])))
             print("Iteration %i, force Error: %f"%(iter_n, np.linalg.norm(error_exe[:,-1])))
             
-            ## show error
-            if PROGRESS_VIZ:
-                time_t = np.arange(0,len(curve_xy_exe))*mctrl.TIMESTEP
-                # subplots plotting x y force
-                fig, axs = plt.subplots(3)
-                axs[0].plot(time_t,curve_xy[:,0],label='desired x')
-                axs[0].plot(time_t,curve_xy_exe[:,0],label='executed x')
-                axs[0].set_title('x')
-                axs[0].legend()
-                axs[1].plot(time_t,curve_xy[:,1],label='desired y')
-                axs[1].plot(time_t,curve_xy_exe[:,1],label='executed y')
-                axs[1].set_title('y')
-                axs[1].legend()
-                axs[2].plot(time_t,fz_des,label='desired force')
-                axs[2].plot(time_t,curve_f_exe,label='executed force')
-                axs[2].set_title('force')
-                axs[2].legend()
-                plt.show()
-            
             ## second half
+            print("Second half")
             error_exe_flip = np.flip(error_exe,axis=0)
             traj_xy_auginput = traj_xy_input - error_exe_flip[:,:-1]
             traj_fz_auginput = traj_fz_input - error_exe_flip[:,-1]
-            mctrl.motion_start_procedure(curve_js[0],force_path[0],h_offset,h_offset_low)
-            joint_force_exe, cart_force_exe = mctrl.trajectory_force_PIDcontrol(traj_xy_auginput,traj_fz_auginput,force_lookahead=False)
-            mctrl.motion_end_procedure(curve_js[-1],h_offset)
+            mctrl.motion_start_procedure(traj_q[0],traj_fz_input[0],h_offset,h_offset_low,lin_vel=joging_speed)
+            joint_force_exe, cart_force_exe = mctrl.trajectory_force_PIDcontrol(traj_xy_auginput,traj_q,traj_fz_auginput,force_lookahead=use_lookahead)
+            mctrl.motion_end_procedure(traj_q[-1],h_offset,lin_vel=joging_speed)
             
             # get gradient
-            delta_xy = cart_force_exe[:,-2:]-curve_xy_exe
+            delta_xy = cart_force_exe[:,-3:-1]-curve_xy_exe
             delta_fz = cart_force_exe[:,1]-curve_f_exe
             G_error_flip = np.hstack((delta_xy,delta_fz.reshape(-1,1)))
             G_error = np.flip(G_error_flip,axis=0)
@@ -526,37 +529,46 @@ def main():
                 traj_xy_input = traj_xy_input - alpha*G_error[:,:-1]
             if force_ilc:
                 traj_fz_input = traj_fz_input - alpha*G_error[:,-1]
-                
+            
+            # save data
+            np.savetxt(CODE_PATH+'record/traj_xyf.csv',np.hstack((traj_xy,traj_fz.reshape(-1,1))),delimiter=',')
+            np.savetxt(CODE_PATH+'record/iter_%i_traj_xyf_input.csv'%iter_n,np.hstack((traj_xy_input,traj_fz_input.reshape(-1,1))),delimiter=',')
+            np.savetxt(CODE_PATH+'record/iter_%i_xyz_exe.csv'%iter_n,np.hstack((curve_xy_exe,curve_f_exe.reshape(-1,1))),delimiter=',')
+            np.savetxt(CODE_PATH+'record/iter_%i_G_error.csv'%iter_n,G_error,delimiter=',')
+
             if PROGRESS_VIZ:
                 # show gradient
                 time_t = np.arange(0,len(G_error))*mctrl.TIMESTEP
                 # subplots plotting x y force gradient
-                fig, axs = plt.subplots(3)
-                axs[0].plot(time_t,G_error[:,0],label='x')
+                fig, axs = plt.subplots(6)
+                axs[0].plot(time_t,traj_xy[:,0],label='desired x')
+                axs[0].plot(time_t,curve_xy_exe[:,0],label='executed x')
                 axs[0].set_title('x')
                 axs[0].legend()
-                axs[1].plot(time_t,G_error[:,1],label='y')
-                axs[1].set_title('y')
+                axs[1].plot(time_t,G_error[:,0],label='gradient x')
+                axs[1].set_title('gradient x')
                 axs[1].legend()
-                axs[2].plot(time_t,G_error[:,2],label='force')
-                axs[2].set_title('force')
+                axs[2].plot(time_t,traj_xy[:,1],label='desired y')
+                axs[2].plot(time_t,curve_xy_exe[:,1],label='executed y')
+                axs[2].set_title('y')
                 axs[2].legend()
+                axs[3].plot(time_t,G_error[:,1],label='gradient y')
+                axs[3].set_title('gradient y')
+                axs[3].legend()
+                axs[4].plot(time_t,traj_fz,label='desired force')
+                axs[4].plot(time_t,curve_f_exe,label='executed force')
+                axs[4].set_title('force')
+                axs[4].legend()
+                axs[5].plot(time_t,G_error[:,2],label='gradient force')
+                axs[5].set_title('gradient force')
+                axs[5].legend()
                 plt.show()
+            
+            print("=================================")
         ####################################
     
     #jog to end point
-    pose_end=robot.fwd(curve_js[-1])
-    p_end=pose_end.p+150*ipad_pose[:3,-2]
-    q_end=robot.inv(p_end,pose_end.R,curve_js[-1])[0]
-    mctrl.jog_joint_position_cmd(q_end)
-
-    # record data
-    Path(CODE_PATH+'record').mkdir(parents=True, exist_ok=True)
-    for i in range(len(ft_record_load)):
-        ft_record_load[i]=np.array(ft_record_load[i])
-        ft_record_move[i]=np.array(ft_record_move[i])
-        np.savetxt(CODE_PATH+'record/ft_record_load_%i.csv'%i,ft_record_load[i],delimiter=',')
-        np.savetxt(CODE_PATH+'record/ft_record_move_%i.csv'%i,ft_record_move[i],delimiter=',')
+    mctrl.motion_end_procedure(traj_q[-1],150,lin_vel=joging_speed)
     
     ## direct visualization
     if visualize:

@@ -10,11 +10,13 @@ sys.path.append('../search_algorithm')
 from dfs import DFS
 import networkx as nx
 
+CODE_PATH = '../'
+
 # img_name = 'wen_name_out'
 # img_name = 'eric_name_out'
 # img_name = 'new_year_out'
-# img_name = 'ilc_path2'
-img_name = 'yong'
+img_name = 'ilc_path2'
+# img_name = 'yong'
 img_dir = '../imgs/'
 
 edge_connection_thres=80
