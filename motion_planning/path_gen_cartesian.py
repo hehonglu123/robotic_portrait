@@ -14,6 +14,7 @@ def image2plane(img,ipad_pose,pixel2mm,pixel_paths,pixel2force):
     ###find a ratio to fit image in paper
     image_center=np.array([img.shape[1]/2,img.shape[0]/2])
     cartesian_paths=[]
+    cartesian_paths_world=[]
     force_paths=[]
     for pixel_path in pixel_paths:
         cartesian_path=(pixel_path[:,:2]-image_center)*pixel2mm
@@ -21,15 +22,17 @@ def image2plane(img,ipad_pose,pixel2mm,pixel_paths,pixel2force):
         cartesian_path=np.dot(np.array([[0,-1],[-1,0]]),cartesian_path.T).T
         #append 0 in z
         cartesian_path=np.hstack((cartesian_path,np.zeros((len(cartesian_path),1))))
-        cartesian_path=np.dot(ipad_pose[:3,:3],cartesian_path.T).T+np.tile(ipad_pose[:3,-1],(len(cartesian_path),1))
+        #convert to world frame
+        cartesian_path_world=np.dot(ipad_pose[:3,:3],cartesian_path.T).T+np.tile(ipad_pose[:3,-1],(len(cartesian_path),1))
 
         ##convert to force
         force_path=pixel2force[0]*pixel_path[:,2]+pixel2force[1]
 
         cartesian_paths.append(cartesian_path)
+        cartesian_paths_world.append(cartesian_path_world)
         force_paths.append(force_path)
     
-    return cartesian_paths,force_paths
+    return cartesian_paths, cartesian_paths_world, force_paths
 
 def main():
     # img_name='eric_name_out'
@@ -56,15 +59,15 @@ def main():
     
     print(paper_size,img_gray.shape,pixel2mm)
     
-    cartesian_paths,force_paths=image2plane(img,ipad_pose,pixel2mm,pixel_paths,pixel2force)
-    for i in range(len(cartesian_paths)):
+    cartesian_paths,cartesian_paths_world,force_paths=image2plane(img,ipad_pose,pixel2mm,pixel_paths,pixel2force)
+    for i in range(len(cartesian_paths_world)):
 
         ###plot out the path in 3D
-        ax.plot(cartesian_paths[i][:,0], cartesian_paths[i][:,1], cartesian_paths[i][:,2], 'b')
+        ax.plot(cartesian_paths_world[i][:,0], cartesian_paths_world[i][:,1], cartesian_paths_world[i][:,2], 'b')
         ###save path
         Path('path/cartesian_path/'+img_name).mkdir(parents=True, exist_ok=True)
         Path('path/force_path/'+img_name).mkdir(parents=True, exist_ok=True)
-        np.savetxt('path/cartesian_path/'+img_name+'/%i.csv'%i,cartesian_paths[i],delimiter=',')
+        np.savetxt('path/cartesian_path/'+img_name+'/%i.csv'%i,cartesian_paths_world[i],delimiter=',')
         np.savetxt('path/force_path/'+img_name+'/%i.csv'%i,force_paths[i],delimiter=',')
     ax.set_xlabel('X Label')
     ax.set_ylabel('Y Label')
