@@ -2,7 +2,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 CODE_PATH = '../'
-data_dir=CODE_PATH+'record/'
+# data_dir=CODE_PATH+'record/'
 traj_xyf=np.loadtxt(data_dir+'traj_xyf.csv',delimiter=',')
 traj_input_iter=[]
 traj_exe_iter=[]
