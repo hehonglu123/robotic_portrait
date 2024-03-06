@@ -393,3 +393,7 @@ mocap/ge_testbed/data/*
 record_analysis/**/*.csv
 record_analysis/**/*.png
 path/**/*_name*
+ILC/results*
+path/
+imgs/**/*_resized*
+imgs/**/*_name*
