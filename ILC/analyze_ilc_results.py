@@ -38,6 +38,7 @@ for data in data_sets:
     error_x_norm=[]
     error_y_norm=[]
     error_f_norm=[]
+    all_error_f = []
     for iter_i in range(iter_n):
         error_x = traj_exe_iter[iter_i][:,0]-traj_xyf[:,0]
         error_y = traj_exe_iter[iter_i][:,1]-traj_xyf[:,1]
@@ -45,11 +46,28 @@ for data in data_sets:
         error_x_norm.append(np.linalg.norm(error_x))
         error_y_norm.append(np.linalg.norm(error_y))
         error_f_norm.append(np.linalg.norm(error_f))
+        all_error_f.append(error_f)
     error_x_norm_datasets.append(error_x_norm)
     error_y_norms_datasets.append(error_y_norm)
     error_f_norms_datasets.append(error_f_norm)
     
     if data in show_datasets:
+        # plot f error in xy plane
+        # Plotting the last all_error_f heatmap on traj_exe_iter x y plane
+        for i in [0,-1]:
+            fig, ax = plt.subplots(figsize=(8, 6))
+            if i==0:
+                ax.set_title('Error Heatmap - X vs Y (First Iteration)', fontsize=title_fontsize)
+            else:
+                ax.set_title('Error Heatmap - X vs Y (Last Iteration)', fontsize=title_fontsize)
+            ax.set_xlabel('X (mm)', fontsize=label_fontsize)
+            ax.set_ylabel('Y (mm)', fontsize=label_fontsize)
+            ax.tick_params(labelsize=tick_fontsize)
+            ax.scatter(traj_exe_iter[i][:, 1]*-1, traj_exe_iter[i][:, 0], c=np.fabs(all_error_f[i]), cmap='hot', s=10)
+            cbar = plt.colorbar(ax.collections[0], ax=ax, orientation='vertical')
+            ax.set_aspect('equal')  # Fix x-y ratio
+            plt.show()
+        
         jump_n = int(iter_n/show_N_only)
         draw_n = np.arange(0,iter_n,jump_n)
         if iter_n-1 not in draw_n:
