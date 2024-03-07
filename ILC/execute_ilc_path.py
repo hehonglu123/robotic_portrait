@@ -21,15 +21,6 @@ PROGRESS_VIZ = False
 
 USE_RR_ROBOT = False
 
-def spline_js(cartesian_path,curve_js,vd,rate=250):
-    lam=calc_lam_cs(cartesian_path)
-    # polyfit=np.polyfit(lam,curve_js,deg=40)
-    # lam=np.linspace(0,lam[-1],int(rate*lam[-1]/vd))
-    # return np.vstack((np.poly1d(polyfit[:,0])(lam), np.poly1d(polyfit[:,1])(lam), np.poly1d(polyfit[:,2])(lam), np.poly1d(polyfit[:,3])(lam), np.poly1d(polyfit[:,4])(lam), np.poly1d(polyfit[:,5])(lam))).T
-    polyfit=CubicSpline(lam,curve_js)
-    lam=np.linspace(0,lam[-1],int(rate*lam[-1]/vd))
-    return polyfit(lam)
-
 def adjoint_map(T):
     R=T.R
     p=T.p
@@ -485,87 +476,33 @@ def main():
         # get path length
         lam = calc_lam_js(curve_js,mctrl.robot)
         # get trajectory and time_bp
-        traj_q, traj_xy, traj_fz, time_bp = mctrl.trajectory_generate(curve_js,curve_xy,fz_des)
+        traj_xyf = np.loadtxt('learned_traj/'+img_name+'/traj_xyf_input_%i.csv'%i,delimiter=',')
+        traj_xy_input = traj_xyf[:,:2]
+        traj_fz_input = traj_xyf[:,2]
+        traj_q = np.loadtxt('learned_traj/'+img_name+'/traj_js.csv',delimiter=',')
         
+        ### to be removed
+        traj_q, traj_xy, traj_fz, time_bp = mctrl.trajectory_generate(curve_js,curve_xy,fz_des)
         traj_xy_input = deepcopy(traj_xy)
         traj_fz_input = deepcopy(traj_fz)
-        for iter_n in range(iteration_N):
-            if SHOW_STATUS:
-                input("Start iteration %i?"%iter_n)
-            print("Iteration %i"%iter_n)
-            ## first half
-            print("First half")
-            mctrl.motion_start_procedure(traj_q[0],traj_fz_input[0],h_offset,h_offset_low,lin_vel=joging_speed)
-            joint_force_exe, cart_force_exe = mctrl.trajectory_force_PIDcontrol(traj_xy_input,traj_q,traj_fz_input,force_lookahead=use_lookahead)
-            mctrl.motion_end_procedure(traj_q[-1],h_offset, lin_vel=joging_speed)
-            
-            curve_xy_exe = cart_force_exe[:,-3:-1]
-            curve_f_exe = cart_force_exe[:,1]
-            # moving average to smooth executed force and xy
-            curve_xy_exe[:,0] = moving_average(curve_xy_exe[:,0], n=motion_smooth_n, padding=True)
-            curve_xy_exe[:,1] = moving_average(curve_xy_exe[:,1], n=motion_smooth_n, padding=True)
-            curve_f_exe = moving_average(curve_f_exe, n=force_smooth_n, padding=True)
-            ## get error
-            error_exe = np.hstack((traj_xy-curve_xy_exe,traj_fz.reshape(-1,1)-curve_f_exe.reshape(-1,1)))
+        ###########
+        
+        mctrl.motion_start_procedure(traj_q[0],traj_fz_input[0],h_offset,h_offset_low,lin_vel=joging_speed)
+        joint_force_exe, cart_force_exe = mctrl.trajectory_force_PIDcontrol(traj_xy_input,traj_q,traj_fz_input,force_lookahead=use_lookahead)
+        mctrl.motion_end_procedure(traj_q[-1],h_offset, lin_vel=joging_speed)
+        
+        curve_xy_exe = cart_force_exe[:,-3:-1]
+        curve_f_exe = cart_force_exe[:,1]
+        # moving average to smooth executed force and xy
+        curve_xy_exe[:,0] = moving_average(curve_xy_exe[:,0], n=motion_smooth_n, padding=True)
+        curve_xy_exe[:,1] = moving_average(curve_xy_exe[:,1], n=motion_smooth_n, padding=True)
+        curve_f_exe = moving_average(curve_f_exe, n=force_smooth_n, padding=True)
+        ## get error
+        error_exe = np.hstack((traj_xy-curve_xy_exe,traj_fz.reshape(-1,1)-curve_f_exe.reshape(-1,1)))
 
-            print("Iteration %i, motion xy Error: %f"%(iter_n, np.linalg.norm(error_exe[:,:-1])))
-            print("Iteration %i, force Error: %f"%(iter_n, np.linalg.norm(error_exe[:,-1])))
-            
-            ## second half
-            print("Second half")
-            error_exe_flip = np.flip(error_exe,axis=0)
-            traj_xy_auginput = traj_xy_input - error_exe_flip[:,:-1]
-            traj_fz_auginput = traj_fz_input - error_exe_flip[:,-1]
-            mctrl.motion_start_procedure(traj_q[0],traj_fz_input[0],h_offset,h_offset_low,lin_vel=joging_speed)
-            joint_force_exe, cart_force_exe = mctrl.trajectory_force_PIDcontrol(traj_xy_auginput,traj_q,traj_fz_auginput,force_lookahead=use_lookahead)
-            mctrl.motion_end_procedure(traj_q[-1],h_offset,lin_vel=joging_speed)
-            
-            # get gradient
-            delta_xy = cart_force_exe[:,-3:-1]-curve_xy_exe
-            delta_fz = cart_force_exe[:,1]-curve_f_exe
-            G_error_flip = np.hstack((delta_xy,delta_fz.reshape(-1,1)))
-            G_error = np.flip(G_error_flip,axis=0)
-            if motion_ilc:
-                traj_xy_input = traj_xy_input - alpha*G_error[:,:-1]
-            if force_ilc:
-                traj_fz_input = traj_fz_input - alpha*G_error[:,-1]
-            
-            # save data
-            np.savetxt(CODE_PATH+'record/traj_xyf.csv',np.hstack((traj_xy,traj_fz.reshape(-1,1))),delimiter=',')
-            np.savetxt(CODE_PATH+'record/traj_js.csv',traj_q,delimiter=',')
-            np.savetxt(CODE_PATH+'record/iter_%i_traj_xyf_input.csv'%iter_n,np.hstack((traj_xy_input,traj_fz_input.reshape(-1,1))),delimiter=',')
-            np.savetxt(CODE_PATH+'record/iter_%i_xyz_exe.csv'%iter_n,np.hstack((curve_xy_exe,curve_f_exe.reshape(-1,1))),delimiter=',')
-            np.savetxt(CODE_PATH+'record/iter_%i_G_error.csv'%iter_n,G_error,delimiter=',')
-
-            if PROGRESS_VIZ:
-                # show gradient
-                time_t = np.arange(0,len(G_error))*mctrl.TIMESTEP
-                # subplots plotting x y force gradient
-                fig, axs = plt.subplots(6)
-                axs[0].plot(time_t,traj_xy[:,0],label='desired x')
-                axs[0].plot(time_t,curve_xy_exe[:,0],label='executed x')
-                axs[0].set_title('x')
-                axs[0].legend()
-                axs[1].plot(time_t,G_error[:,0],label='gradient x')
-                axs[1].set_title('gradient x')
-                axs[1].legend()
-                axs[2].plot(time_t,traj_xy[:,1],label='desired y')
-                axs[2].plot(time_t,curve_xy_exe[:,1],label='executed y')
-                axs[2].set_title('y')
-                axs[2].legend()
-                axs[3].plot(time_t,G_error[:,1],label='gradient y')
-                axs[3].set_title('gradient y')
-                axs[3].legend()
-                axs[4].plot(time_t,traj_fz,label='desired force')
-                axs[4].plot(time_t,curve_f_exe,label='executed force')
-                axs[4].set_title('force')
-                axs[4].legend()
-                axs[5].plot(time_t,G_error[:,2],label='gradient force')
-                axs[5].set_title('gradient force')
-                axs[5].legend()
-                plt.show()
-            
-            print("=================================")
+        print("Motion xy Error: %f"%(np.linalg.norm(error_exe[:,:-1])))
+        print("Force Error: %f"%(np.linalg.norm(error_exe[:,-1])))
+        print("=================================")
         ####################################
     
     #jog to end point
