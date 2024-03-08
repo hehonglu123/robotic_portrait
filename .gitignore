@@ -394,6 +394,8 @@ record_analysis/**/*.csv
 record_analysis/**/*.png
 path/**/*_name*
 ILC/results*
+ILC/record*
 path/
 imgs/**/*_resized*
 imgs/**/*_name*
+record*
