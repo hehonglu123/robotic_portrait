@@ -475,17 +475,15 @@ def main():
         curve_xy = curve_xyz[:,:2]
         # get path length
         lam = calc_lam_js(curve_js,mctrl.robot)
+
         # get trajectory and time_bp
-        traj_xyf = np.loadtxt('learned_traj/'+img_name+'/traj_xyf_input_%i.csv'%i,delimiter=',')
-        traj_xy_input = traj_xyf[:,:2]
-        traj_fz_input = traj_xyf[:,2]
-        traj_q = np.loadtxt('learned_traj/'+img_name+'/traj_js.csv',delimiter=',')
-        
-        ### to be removed
-        traj_q, traj_xy, traj_fz, time_bp = mctrl.trajectory_generate(curve_js,curve_xy,fz_des)
-        traj_xy_input = deepcopy(traj_xy)
-        traj_fz_input = deepcopy(traj_fz)
-        ###########
+        traj_xyf = np.loadtxt('learned_traj/'+img_name+'/traj_xyf_%i.csv'%i,delimiter=',')
+        traj_xy = traj_xyf[:,:2]
+        traj_fz = traj_xyf[:,2]
+        traj_xyf_input = np.loadtxt('learned_traj/'+img_name+'/traj_xyf_input_%i.csv'%i,delimiter=',')
+        traj_xy_input = traj_xyf_input[:,:2]
+        traj_fz_input = traj_xyf_input[:,2]
+        traj_q = np.loadtxt('learned_traj/'+img_name+'/traj_js_%i.csv'%i,delimiter=',')
         
         mctrl.motion_start_procedure(traj_q[0],traj_fz_input[0],h_offset,h_offset_low,lin_vel=joging_speed)
         joint_force_exe, cart_force_exe = mctrl.trajectory_force_PIDcontrol(traj_xy_input,traj_q,traj_fz_input,force_lookahead=use_lookahead)
@@ -507,18 +505,6 @@ def main():
     
     #jog to end point
     mctrl.motion_end_procedure(traj_q[-1],150,lin_vel=joging_speed)
-    
-    ## direct visualization
-    if visualize:
-        for i in range(len(ft_record_load)):
-            lam = calc_lam_js(curve_js,robot)
-            lam_exe = calc_lam_js(np.radians(ft_record_move[i][:,2:]),robot)
-            # linear interpolation
-            f_desired = np.interp(lam_exe, lam, force_path)
-            plt.plot(lam_exe,-1*ft_record_move[i][:,1],label='executed force, test '+str(i))
-            plt.plot(lam_exe,f_desired,label='desired force')
-            plt.legend()
-            plt.show()
 
 if __name__ == '__main__':
     main()
