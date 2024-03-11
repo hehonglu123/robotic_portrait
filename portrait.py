@@ -5,7 +5,10 @@ import numpy as np
 import timeit
 import onnxruntime
 import argparse
+import torch
+import facer
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 class AnimeGANv3:
     def __init__(self, model_path):
@@ -43,8 +46,34 @@ def brighten_dark_areas(image, alpha=1.2, beta=100):
 if __name__ == "__main__":
 
     anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
-    img_name='me'
-    img = cv2.imread('imgs/'+img_name+'.png')
+    # data_dir='imgs/'
+    # img_name='me'
+    data_dir='temp_data/'
+    img_name='img'
+    img = cv2.imread(data_dir+img_name+'.jpg')
+    
+    image = facer.hwc2bchw(facer.read_hwc(data_dir+img_name+'.jpg')).to(device=device)  # image: 1 x 3 x h x w
+
+    face_detector = facer.face_detector('retinaface/mobilenet', device=device)
+    with torch.inference_mode():
+        faces = face_detector(image)
+    face_parser = facer.face_parser('farl/lapa/448', device=device) # optional "farl/celebm/448"
+    with torch.inference_mode():
+        faces = face_parser(image, faces)
+
+    seg_logits = faces['seg']['logits']
+    seg_probs = seg_logits.softmax(dim=1)  # nfaces x nclasses x h x w
+    print(type(seg_probs))
+    print(seg_probs.size())
+    n_classes = seg_probs.size(1)
+    vis_seg_probs = seg_probs.argmax(dim=1).float()/n_classes*255
+    print(type(vis_seg_probs))
+    vis_img = vis_seg_probs.sum(0, keepdim=True)
+    print(type(vis_img))
+    facer.show_bhw(vis_img)
+    facer.show_bchw(facer.draw_bchw(image, faces))
+    
+    exit()
     #convert dark pixels to bright pixels
     gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     #TODO: Identify dark cloth and convert brighter
@@ -53,7 +82,7 @@ if __name__ == "__main__":
     cv2.waitKey(0)
 
     output = anime.forward(gray_image)
-    cv2.imwrite('imgs/'+img_name+'_out.png', output)
+    cv2.imwrite(data_dir+img_name+'_out.jpg', output)
 
     # gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 

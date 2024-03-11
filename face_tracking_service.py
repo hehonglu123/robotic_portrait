@@ -138,7 +138,8 @@ def create_pipeline():
 	return pipeline
 
 
-
+VIZ_FRAME=True
+frame_viz=None
 
 RRC.RegisterStdRobDefServiceTypes(RRN)
 with RR.ServerNodeSetup("experimental.face_tracking", 52222):
@@ -190,14 +191,20 @@ with RR.ServerNodeSetup("experimental.face_tracking", 52222):
 						continue
 
 					#draw bounding box
-					# cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (255, 0, 0), 2)
+					if VIZ_FRAME:
+						frame_viz = frame.copy()
+						cv2.rectangle(frame_viz, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (255, 0, 0), 2)
 					
 					bboxes.append(bbox)
 					bboxes_area.append((bbox[2]-bbox[0])*(bbox[3]-bbox[1]))
 					
 
-
-				# cv2.imshow("Frame", cv2.resize(frame, (900,900)))
+				if VIZ_FRAME :
+					if frame_viz is not None:
+						cv2.imshow("Frame", cv2.resize(frame_viz, (900,900)))
+					else:
+						cv2.imshow("Frame", cv2.resize(frame, (900,900)))
+					cv2.waitKey(1)
 
 				###find the largest bbox
 				if len(bboxes)>0:
