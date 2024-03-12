@@ -9,8 +9,11 @@ from portrait import *
 from traversal_force import *
 from traj_gen_cartesian import *
 sys.path.append('robot_motion')
+from RobotMotionController import *
 
 ROBOT_NAME='ABB_1200_5_90' # ABB_1200_5_90 or ur5
+FORCE_FEEDBACK=False
+
 if ROBOT_NAME=='ABB_1200_5_90':
     #########################################################config parameters#########################################################
     robot_cam=robot_obj(ROBOT_NAME,'config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/camera.csv')
@@ -25,6 +28,7 @@ if ROBOT_NAME=='ABB_1200_5_90':
     q_start=robot_cam.inv(p_start,R_start,np.zeros(6))[0]	###initial joint position
     image_center=np.array([1080,1080])/2	###image center
     RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
+    TIMESTEP=0.004
 elif ROBOT_NAME=='ur5':
     #########################################################UR config parameters#########################################################
     robot_cam=robot_obj(ROBOT_NAME,'config/ur5_robot_default_config.yml',tool_file_path='config/camera_ur.csv')
@@ -40,49 +44,55 @@ elif ROBOT_NAME=='ur5':
     q_tracking_start=robot.inv(p_tracking_start,R_tracking_start,q_seed)[0]	###initial joint position
     image_center=np.array([1080,1080])/2	###image center
     RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
+    TIMESTEP=0.01
 else:
     assert False, "ROBOT_NAME is not valid"
 
-#########################################################RR PARAMETERS#########################################################
-RR_robot=RR_robot_sub.GetDefaultClientWait(1)
-robot_state = RR_robot_sub.SubscribeWire("robot_state")
-robot_const = RRN.GetConstants("com.robotraconteur.robotics.robot", RR_robot)
-halt_mode = robot_const["RobotCommandMode"]["halt"]
-position_mode = robot_const["RobotCommandMode"]["position_command"]
-trajectory_mode = robot_const["RobotCommandMode"]["trajectory"]
-jog_mode = robot_const["RobotCommandMode"]["jog"]
-RobotJointCommand = RRN.GetStructureType("com.robotraconteur.robotics.robot.RobotJointCommand",RR_robot)
-command_seqno = 1
-RR_robot.command_mode = halt_mode
-time.sleep(0.1)
-# RR_robot.reset_errors()
-# time.sleep(0.1)
+RR_ati_cli=None
+if FORCE_FEEDBACK:
+    RR_ati_cli=RRN.ConnectService('rr+tcp://localhost:59823?service=ati_sensor') # connect to ATI sensor
+#########################################################config parameters#########################################################
+paper_size=np.loadtxt('config/paper_size.csv',delimiter=',') # size of the paper
+pen_radius=np.loadtxt('config/pen_radius.csv',delimiter=',') # pen radius
+ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',') # ipad pose
+H_pentip2ati=np.loadtxt('config/pentip2ati.csv',delimiter=',') # FT sensor info
+######## Controller parameters ###
+controller_params = {
+    "force_ctrl_damping": 60.0, # 180, 90, 60
+    "force_epsilon": 0.1, # Unit: N
+    "moveL_speed_lin": 6.0, # Unit: mm/sec
+    "moveL_acc_lin": 1.0, # Unit: mm/sec^2
+    "moveL_speed_ang": np.radians(10), # Unit: rad/sec
+    "trapzoid_slope": 1, # trapzoidal load profile. Unit: N/sec
+    "load_speed": 10.0, # Unit mm/sec
+    "unload_speed": 1.0, # Unit mm/sec
+    'settling_time': 1, # Unit: sec
+    "lookahead_time": 0.132 # Unit: sec
+    }
+### Define the motion controller
+mctrl=MotionController(robot,ipad_pose,H_pentip2ati,controller_params,TIMESTEP,USE_RR_ROBOT=True,
+                 RR_robot_sub=RR_robot_sub,FORCE_PROTECTION=5,RR_ati_cli=RR_ati_cli)
 
-RR_robot.command_mode = position_mode
-cmd_w = RR_robot_sub.SubscribeWire("position_command")
-
-
-########subscription mode
+###### Face tracking RR client ######
 def connect_failed(s, client_id, url, err):
     print ("Client connect failed: " + str(client_id.NodeID) + " url: " + str(url) + " error: " + str(err))
-
 face_tracking_sub=RRN.SubscribeService('rr+tcp://localhost:52222/?service=Face_tracking')
 obj = face_tracking_sub.GetDefaultClientWait(1)		#connect, timeout=30s
 bbox_wire=face_tracking_sub.SubscribeWire("bbox")
 image_wire=face_tracking_sub.SubscribeWire("frame_stream")
-
 face_tracking_sub.ClientConnectFailed += connect_failed
 
-
-
-
+### Portrait NNs ###
+faceseg = FaceSegmentation()
+anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
 
 #########################################################EXECUTION#########################################################
 while True:
     start_time=time.time()
     #jog to initial_position
-    jog_joint_position_cmd(q_tracking_start,v=0.2,wait_time=0.5)
+    mctrl.jog_joint_position_cmd(q_tracking_start,v=0.2,wait_time=0.5)
 
+    ###################### Face tracking ######################
     q_cmd_prev=q_tracking_start
     while True:
         loop_start_time=time.time()
@@ -137,8 +147,7 @@ while True:
                 else:
                     start_time=time.time()
 
-
-
+    ##### Get face image #####
     RR_image=image_wire.TryGetInValue()
     if RR_image[0]:
         img=RR_image[1]
@@ -151,15 +160,19 @@ while True:
     # cv2.imshow("img", img)
     # cv2.waitKey(0)
     # cv2. destroyAllWindows() 
+    ############################################################
 
-    ###############################################################################PLANNING########################################################################################
-    paper_size=np.loadtxt('config/paper_size.csv',delimiter=',')
-    pen_radius=np.loadtxt('config/pen_radius.csv',delimiter=',')
-    ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
-
-    ###portrait GAN
-    anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
-    anime_img = anime.forward(img)
+    ########################## portrait FaceSegmentation/GAN ##############################
+    ## Face Segmentation
+    image_mask = faceseg.forward_faceonly(img)
+    #convert dark pixels to bright pixels
+    gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray_image_masked = cv2.bitwise_and(gray_image, gray_image, mask = image_mask)
+    # get second masked value (background) mask must be inverted
+    background = np.full(gray_image.shape, 255, dtype=np.uint8)
+    bk = cv2.bitwise_and(background, background, mask=cv2.bitwise_not(image_mask))
+    gray_image_masked = cv2.add(gray_image_masked, bk)
+    anime_img = anime.forward(gray_image_masked)
     img_gray=cv2.cvtColor(anime_img, cv2.COLOR_BGR2GRAY)
     pixel2mm=min(paper_size/img_gray.shape)
 
@@ -167,12 +180,12 @@ while True:
     # cv2.imshow("img", anime_img)
     # cv2.waitKey(0)
     # cv2. destroyAllWindows() 
-
+    ####################################################################
+    
+    ####################################PLANNING#####################################################
     ###Pixel Traversal
     print('TRAVERSING PIXELS')
     pixel_paths=image_traversal(anime_img,paper_size,pen_radius)
-
-
     ###Project to IPAD
     cartesian_paths=image2plane(anime_img, ipad_pose, pixel2mm,pixel_paths)
 
@@ -194,8 +207,6 @@ while True:
         curve_js=robot.find_curve_js(cartesian_path,[R_pencil]*len(cartesian_path),q_seed)
         js_paths.append(curve_js)
 
-
-
     print("PAGE FLIPPING")
     p_flip=np.array([-577.69418679,   59.06883188, -111.31898296])
     q_flip=robot.inv(p_flip,R_pencil,q_seed)[0]
@@ -204,8 +215,6 @@ while True:
     jog_joint_position_cmd(q_flip_top,v=0.1)
     jog_joint_position_cmd(q_flip,v=0.1,wait_time=0.2)
     jog_joint_position_cmd(q_flip_top,v=0.1)
-
-
 
     print('START DRAWING')
     ###Execute

@@ -39,6 +39,29 @@ class AnimeGANv3:
         output = cv2.cvtColor(output_image, cv2.COLOR_RGB2BGR)
         return output
 
+class FaceSegmentation:
+    def __init__(self) -> None:
+        self.face_detector = facer.face_detector('retinaface/mobilenet', device=device)
+        self.face_parser = facer.face_parser('farl/lapa/448', device=device) # optional "farl/celebm/448"
+    def forward_faceonly(self,img):
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img_rgb = torch.from_numpy(img_rgb)
+        img_input = facer.hwc2bchw(img_rgb).to(device=device)  # image: 1 x 3 x h x w
+        
+        with torch.inference_mode():
+            faces = self.face_detector(img_input)
+        with torch.inference_mode():
+            faces = self.face_parser(img_input, faces)
+        
+        seg_logits = faces['seg']['logits']
+        seg_probs = seg_logits.softmax(dim=1)  # nfaces x nclasses x h x w
+        n_classes = seg_probs.size(1)
+        vis_seg_probs = seg_probs.argmax(dim=1).float()
+        image_mask = np.squeeze(vis_seg_probs.cpu().numpy())
+        ret,image_mask = cv2.threshold(image_mask, 0, 255, cv2.THRESH_BINARY)
+        image_mask=image_mask.astype(np.uint8)
+        return image_mask
+
 def brighten_dark_areas(image, alpha=1.2, beta=100):
     # Apply alpha and beta to the image
     result = cv2.addWeighted(image, alpha, np.zeros_like(image), 0, beta)
@@ -54,30 +77,8 @@ if __name__ == "__main__":
     img_name='img'
     img = cv2.imread(data_dir+img_name+'.jpg')
     
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img_rgb = torch.from_numpy(img_rgb)
-    img_input = facer.hwc2bchw(img_rgb).to(device=device)  # image: 1 x 3 x h x w
-
-    face_detector = facer.face_detector('retinaface/mobilenet', device=device)
-    face_parser = facer.face_parser('farl/lapa/448', device=device) # optional "farl/celebm/448"
-    
-    start_time=time.time()
-    with torch.inference_mode():
-        faces = face_detector(img_input)
-    with torch.inference_mode():
-        faces = face_parser(img_input, faces)
-    print("Inferece time: ", time.time()-start_time)
-
-    seg_logits = faces['seg']['logits']
-    seg_probs = seg_logits.softmax(dim=1)  # nfaces x nclasses x h x w
-    n_classes = seg_probs.size(1)
-    vis_seg_probs = seg_probs.argmax(dim=1).float()
-    image_mask = np.squeeze(vis_seg_probs.cpu().numpy())
-    ret,image_mask = cv2.threshold(image_mask, 0, 255, cv2.THRESH_BINARY)
-    image_mask=image_mask.astype(np.uint8)
-    plt.imshow(image_mask)
-    plt.show()
-    
+    fs = FaceSegmentation()
+    image_mask = fs.forward_faceonly(img)
     #convert dark pixels to bright pixels
     gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     gray_image_masked = cv2.bitwise_and(gray_image, gray_image, mask = image_mask)
