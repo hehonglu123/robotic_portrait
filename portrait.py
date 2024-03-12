@@ -3,10 +3,12 @@ import sys
 import cv2
 import numpy as np
 import timeit
+import time
 import onnxruntime
 import argparse
 import torch
 import facer
+from matplotlib import pyplot as plt
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -52,37 +54,50 @@ if __name__ == "__main__":
     img_name='img'
     img = cv2.imread(data_dir+img_name+'.jpg')
     
-    image = facer.hwc2bchw(facer.read_hwc(data_dir+img_name+'.jpg')).to(device=device)  # image: 1 x 3 x h x w
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img_rgb = torch.from_numpy(img_rgb)
+    img_input = facer.hwc2bchw(img_rgb).to(device=device)  # image: 1 x 3 x h x w
 
     face_detector = facer.face_detector('retinaface/mobilenet', device=device)
-    with torch.inference_mode():
-        faces = face_detector(image)
     face_parser = facer.face_parser('farl/lapa/448', device=device) # optional "farl/celebm/448"
+    
+    start_time=time.time()
     with torch.inference_mode():
-        faces = face_parser(image, faces)
+        faces = face_detector(img_input)
+    with torch.inference_mode():
+        faces = face_parser(img_input, faces)
+    print("Inferece time: ", time.time()-start_time)
 
     seg_logits = faces['seg']['logits']
     seg_probs = seg_logits.softmax(dim=1)  # nfaces x nclasses x h x w
-    print(type(seg_probs))
-    print(seg_probs.size())
     n_classes = seg_probs.size(1)
-    vis_seg_probs = seg_probs.argmax(dim=1).float()/n_classes*255
-    print(type(vis_seg_probs))
-    vis_img = vis_seg_probs.sum(0, keepdim=True)
-    print(type(vis_img))
-    facer.show_bhw(vis_img)
-    facer.show_bchw(facer.draw_bchw(image, faces))
+    vis_seg_probs = seg_probs.argmax(dim=1).float()
+    image_mask = np.squeeze(vis_seg_probs.cpu().numpy())
+    ret,image_mask = cv2.threshold(image_mask, 0, 255, cv2.THRESH_BINARY)
+    image_mask=image_mask.astype(np.uint8)
+    plt.imshow(image_mask)
+    plt.show()
     
-    exit()
     #convert dark pixels to bright pixels
     gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray_image_masked = cv2.bitwise_and(gray_image, gray_image, mask = image_mask)
+    # get second masked value (background) mask must be inverted
+    background = np.full(gray_image.shape, 255, dtype=np.uint8)
+    bk = cv2.bitwise_and(background, background, mask=cv2.bitwise_not(image_mask))
+    gray_image_masked = cv2.add(gray_image_masked, bk)
+    plt.imshow(gray_image_masked, cmap='gray')
+    plt.show()
+    
     #TODO: Identify dark cloth and convert brighter
     #display img
-    cv2.imshow("img", brighten_dark_areas(img))
+    cv2.imshow("img", brighten_dark_areas(gray_image_masked))
     cv2.waitKey(0)
 
-    output = anime.forward(gray_image)
+    output = anime.forward(gray_image_masked)
     cv2.imwrite(data_dir+img_name+'_out.jpg', output)
+    
+    output = anime.forward(gray_image)
+    cv2.imwrite(data_dir+img_name+'_out_test.jpg', output)
 
     # gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
