@@ -12,8 +12,6 @@ class DFS(object):
     def search(self,from_edge=False):
         
         def dfs(x, y):
-            if x==383 and y==618:
-                print('dfs',x,y,'path len',len(path))
             # Check if the current pixel is within the image and belongs to the connected component
             if 0 <= x < self.binary_image.shape[1] and 0 <= y < self.binary_image.shape[0]:
                 if self.binary_image[y][x] > 0.01:
@@ -44,3 +42,45 @@ class DFS(object):
             last_start_pixel=start_pixel
         
         return paths
+    
+    def find_path_nodes(self):
+        
+        directions = [(-1, 0), (0, 1), (1, 0), (0, -1), (-1, -1), (-1, 1), (1, 1), (1, -1)]
+        paths=[]
+        paths_start=[]
+        paths_end=[]
+        for cje in self.edges:
+            x_start = cje[0]
+            y_start = cje[1]
+            self.binary_image[y_start][x_start] = 0
+            # start from a conjuction or edge and search directions
+            for direction_start in directions:
+                x_ = x_start+direction_start[0]
+                y_ = y_start+direction_start[1]
+                if 0 <= x_ < self.binary_image.shape[1] and 0 <= y_ < self.binary_image.shape[0]:
+                    if self.binary_image[y_][x_] > 0 or [x_,y_] in self.edges:
+                        self.binary_image[y_][x_] = 0
+                        path=[[x_start,y_start],[x_,y_]]
+                        x=x_
+                        y=y_
+                        while True and [x_,y_] not in self.edges:
+                            for direction in directions:
+                                x_ = x+direction[0]
+                                y_ = y+direction[1]
+                                if 0 <= x_ < self.binary_image.shape[1] and 0 <= y_ < self.binary_image.shape[0]:
+                                    if self.binary_image[y_][x_] > 0 or [x_,y_] in self.edges and [x_,y_]!=[x_start,y_start]:
+                                        break
+                            self.binary_image[y_][x_] = 0
+                            path.append([x_,y_])
+                            if [x_,y_] in self.edges: # find a path to another conjuction or edge
+                                break
+                            x=x_
+                            y=y_
+                        paths.append(path)
+                        paths_start.append(cje)
+                        paths_end.append([x_,y_])
+                        paths.append(path[::-1])
+                        paths_start.append([x_,y_])
+                        paths_end.append(cje)
+        return paths,paths_start,paths_end
+            
