@@ -8,7 +8,7 @@ from abb_robot_client.egm import EGM
 from copy import deepcopy
 from pathlib import Path
 
-sys.path.append('toolbox')
+sys.path.append('../toolbox')
 from robot_def import *
 from lambda_calc import *
 from motion_toolbox import *

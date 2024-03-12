@@ -1,7 +1,7 @@
 from RobotRaconteur.Client import *     #import RR client library
 import time, traceback, sys
 import numpy as np
-sys.path.append('toolbox')
+sys.path.append('../toolbox')
 from robot_def import *
 from vel_emulate_sub import EmulatedVelocityControl
 from lambda_calc import *
