@@ -2,6 +2,7 @@ from RobotRaconteur.Client import *     #import RR client library
 import time, traceback, sys, cv2
 import numpy as np
 sys.path.append('toolbox')
+sys.path.append('motion_planning')
 from robot_def import *
 from vel_emulate_sub import EmulatedVelocityControl
 from lambda_calc import *
@@ -72,7 +73,12 @@ def trajectory_position_cmd(q_all,v=0.4):
 		position_cmd(frac*q_all[seg]+(1-frac)*q_all[seg-1])
 		
 
-
+### parameters and variables
+paper_size=np.loadtxt('config/paper_size.csv',delimiter=',')
+pen_radius=np.loadtxt('config/pen_radius.csv',delimiter=',')
+ipad_pose=np.loadtxt('config/ipad_pose_ur.csv',delimiter=',')
+anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
+faceseg = FaceSegmentation()
 
 #########################################################config parameters#########################################################
 # robot_cam=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/camera.csv')
@@ -98,8 +104,18 @@ R_tracking_start=np.array([	[0,0,-1],
 					[0,-1,0],
 					[-1,0,0]])	###initial orientation
 q_seed=np.radians([0,-54.8,110,-142,-90,0])
-q_tracking_start=robot.inv(p_tracking_start,R_tracking_start,q_seed)[0]	###initial joint position
 image_center=np.array([1080,1080])/2	###image center
+###initial joint position
+q_tracking_start=robot.inv(p_tracking_start,R_tracking_start,q_seed)[0]	
+# Orientation of pencil
+R_pencil=ipad_pose[:3,:3]@Ry(np.pi)
+# flipping pose
+p_flip=np.array([-577.69418679,   59.06883188, -111.31898296])
+q_flip=robot.inv(p_flip,R_pencil,q_seed)[0]
+pose=robot.fwd(q_flip)
+q_flip_top=robot.inv(pose.p+30*ipad_pose[:3,-2],pose.R,q_flip)[0]
+print('q_flip_top',np.degrees(q_flip_top))
+print('q_flip',np.degrees(q_flip))
 
 #########################################################RR PARAMETERS#########################################################
 RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
@@ -131,9 +147,6 @@ bbox_wire=face_tracking_sub.SubscribeWire("bbox")
 image_wire=face_tracking_sub.SubscribeWire("frame_stream")
 
 face_tracking_sub.ClientConnectFailed += connect_failed
-
-
-
 
 
 #########################################################EXECUTION#########################################################
@@ -190,7 +203,7 @@ while True:
 				q_cmd_prev=copy.deepcopy(q_cmd)
 				
 				if np.linalg.norm(qdot)<0.1:
-					print(time.time()-start_time)
+					# print(time.time()-start_time)
 					if time.time()-start_time>3:
 						break
 				else:
@@ -204,21 +217,30 @@ while True:
 		img=np.array(img.data,dtype=np.uint8).reshape((img.image_info.height,img.image_info.width,3))
 		#get the image within the bounding box, a bit larger than the bbox
 		img=img[int(bbox[1]-size[1]/5):int(bbox[3]+size[1]/9),int(bbox[0]-size[0]/9):int(bbox[2]+size[0]/9),:]
+	
+	# move to prepare position
+	jog_joint_position_cmd(q_flip_top,v=0.1)
 
 	print('IMAGE TAKEN')
 	cv2.imwrite('img.jpg',img)
 	# cv2.imshow("img", img)
 	# cv2.waitKey(0)
 	# cv2. destroyAllWindows() 
-
 	###############################################################################PLANNING########################################################################################
-	paper_size=np.loadtxt('config/paper_size.csv',delimiter=',')
-	pen_radius=np.loadtxt('config/pen_radius.csv',delimiter=',')
-	ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
+
+	## face segmentation
+	image_mask = faceseg.forward_faceonly(img)
+	#convert dark pixels to bright pixels
+	# gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+	gray_image = img
+	gray_image_masked = cv2.bitwise_and(gray_image, gray_image, mask = image_mask)
+	# get second masked value (background) mask must be inverted
+	background = np.full(gray_image.shape, 255, dtype=np.uint8)
+	bk = cv2.bitwise_and(background, background, mask=cv2.bitwise_not(image_mask))
+	gray_image_masked = cv2.add(gray_image_masked, bk)
 
 	###portrait GAN
-	anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
-	anime_img = anime.forward(img)
+	anime_img = anime.forward(gray_image_masked)
 	img_gray=cv2.cvtColor(anime_img, cv2.COLOR_BGR2GRAY)
 	pixel2mm=min(paper_size/img_gray.shape)
 
@@ -247,7 +269,6 @@ while True:
 
 	###Solve Joint Trajectory
 	print("SOLVING JOINT TRAJECTORY")
-	R_pencil=ipad_pose[:3,:3]@Ry(np.pi)
 	js_paths=[]
 	for cartesian_path in cartesian_paths:
 		curve_js=robot.find_curve_js(cartesian_path,[R_pencil]*len(cartesian_path),q_seed)
@@ -256,10 +277,6 @@ while True:
 
 
 	print("PAGE FLIPPING")
-	p_flip=np.array([-577.69418679,   59.06883188, -111.31898296])
-	q_flip=robot.inv(p_flip,R_pencil,q_seed)[0]
-	pose=robot.fwd(q_flip)
-	q_flip_top=robot.inv(pose.p+30*ipad_pose[:3,-2],pose.R,q_flip)[0]
 	jog_joint_position_cmd(q_flip_top,v=0.1)
 	jog_joint_position_cmd(q_flip,v=0.1,wait_time=0.2)
 	jog_joint_position_cmd(q_flip_top,v=0.1)

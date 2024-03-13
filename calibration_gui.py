@@ -29,6 +29,7 @@ p_all=[]
 parser = argparse.ArgumentParser(description="RR plug and play client")
 parser.add_argument("--tool-file",type=str,required=True)
 parser.add_argument("--robot-name",type=str,required=True)
+parser.add_argument("--save-file",type=str,default='ipad_pose')
 args, _ = parser.parse_known_args()
 
 name_dict={'ABB':'ABB_1200_5_90','ur':'ur5'}
@@ -162,7 +163,7 @@ def stop():
 	vel_ctrl.set_velocity_command(np.zeros((6,)))
 	return
 
-def save_p():
+def save_p(filename):
 	global vel_ctrl, robot_kin, p_all
 	p_all.append(robot_kin.fwd(vel_ctrl.joint_position()).p)
 	if len(p_all)==4:
@@ -180,7 +181,7 @@ def save_p():
 		R_temp[:,1]=np.cross(R_temp[:,2],R_temp[:,0])
 
 
-		np.savetxt('config/ipad_pose.csv', H_from_RT(R_temp,center), delimiter=',')
+		np.savetxt('config/'+filename+'.csv', H_from_RT(R_temp,center), delimiter=',')
 
 		messagebox.showinfo('Message', 'pose saved')
 
@@ -259,7 +260,7 @@ j6_p=Button(top,text='j6_p')
 
 gripper=Button(top,text='gripper off',command=lambda: gripper_ctrl(tool),bg='red')
 
-save.bind('<ButtonPress-1>', lambda event: save_p())
+save.bind('<ButtonPress-1>', lambda event: save_p(args.save_file))
 clear.bind('<ButtonPress-1>', lambda event: clear_p())
 left.bind('<ButtonPress-1>', lambda event: move([0,20,0],np.eye(3)))
 right.bind('<ButtonPress-1>', lambda event: move([0,-20,0],np.eye(3)))

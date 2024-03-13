@@ -78,8 +78,8 @@ def image_traversal(img,paper_size,pen_radius):
                 img_temp[p[1],p[0]]=255
             
             img_display=cv2.bitwise_or(img_display,img_temp)
-            cv2.imshow("img", cv2.bitwise_not(img_display))
-            cv2.waitKey(0)
+            # cv2.imshow("img", cv2.bitwise_not(img_display))
+            # cv2.waitKey(0)
         
 
         img_copy=img_copy-img_temp

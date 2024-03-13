@@ -70,31 +70,38 @@ def brighten_dark_areas(image, alpha=1.2, beta=100):
 
 if __name__ == "__main__":
 
-    anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
+    
     # data_dir='imgs/'
     # img_name='me'
     data_dir='temp_data/'
-    img_name='img'
+    img_name='img1'
     img = cv2.imread(data_dir+img_name+'.jpg')
     
     fs = FaceSegmentation()
+    start_time=time.time()
     image_mask = fs.forward_faceonly(img)
     #convert dark pixels to bright pixels
-    gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray_image = img
     gray_image_masked = cv2.bitwise_and(gray_image, gray_image, mask = image_mask)
     # get second masked value (background) mask must be inverted
     background = np.full(gray_image.shape, 255, dtype=np.uint8)
     bk = cv2.bitwise_and(background, background, mask=cv2.bitwise_not(image_mask))
     gray_image_masked = cv2.add(gray_image_masked, bk)
-    plt.imshow(gray_image_masked, cmap='gray')
-    plt.show()
+    print('segmentation time:',time.time()-start_time)
+    cv2.imshow("img", gray_image_masked)
+    cv2.waitKey(0)
+    del fs
     
     #TODO: Identify dark cloth and convert brighter
     #display img
-    cv2.imshow("img", brighten_dark_areas(gray_image_masked))
-    cv2.waitKey(0)
+    # cv2.imshow("img", brighten_dark_areas(gray_image_masked))
+    # cv2.waitKey(0)
 
+    anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
+    print("here1")
     output = anime.forward(gray_image_masked)
+    print("here2")
     cv2.imwrite(data_dir+img_name+'_out.jpg', output)
     
     output = anime.forward(gray_image)
