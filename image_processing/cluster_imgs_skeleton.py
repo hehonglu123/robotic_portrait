@@ -52,6 +52,7 @@ while True:
 
     ## find white pixels in image_skeleton and loop through them
     white_pixels = np.where(image_skeleton == 255)
+    print(type(white_pixels))
     white_pixels_removed = []
     image_viz_boarder = deepcopy(image_skeleton)
     
@@ -66,7 +67,12 @@ while True:
                 image_skeleton[y,x]=255
         image_viz_boarder[y,x]=255-dist_transform[y,x]
 
-    white_pixels = np.where(image_skeleton == 255)
+    if count==1:
+        white_pixels = np.where(image_skeleton == 255)
+    else:
+        white_pixels = white_pixels_removed
+        white_pixels = np.array(white_pixels).T
+        white_pixels = tuple(white_pixels)
     
     # plt.imshow(image_vis+image_viz_boarder, cmap='gray')
     # plt.show()
@@ -116,7 +122,7 @@ while True:
     
     # dfs = DFS(image_skeleton, edges)
     # strokes = dfs.search(from_edge=True)
-    # ## split strokes into segments, and find the width of each segment
+    ## split strokes into segments, and find the width of each segment
     # for m in range(len(strokes)):
     #     indices=[]
     #     widths=[]
@@ -207,19 +213,35 @@ while True:
     # find subgraphs
     subgraphs = [graph.subgraph(c).copy() for c in nx.connected_components(graph)]
     total_g=len(subgraphs)
-    all_paths=[]
     count=1
     for subg in subgraphs:    
         print("graph: ",count,"/",total_g," nodes: ",subg.number_of_nodes(), " edges: ", subg.number_of_edges())
-        if subg.number_of_nodes()<min_stroke_length:
-            print("length too short")
-            continue
-        draw_path = nx.approximation.traveling_salesman_problem(subg, cycle=False)
-        all_paths.append(draw_path)
+        connetion_path = nx.approximation.traveling_salesman_problem(subg, cycle=False)
+        connetion_path = list(connetion_path)
+        if subg.number_of_nodes()>2:
+            connetion_path.append(connetion_path[0])
+        
+        draw_path=[]
+        for node_i in range(len(connetion_path)-1):
+            start_node = connetion_path[node_i]
+            end_node = connetion_path[node_i+1]
+            start_ids = np.where(np.all(np.array(paths_start)==np.array(start_node),axis=1))
+            end_ids = np.where(np.all(np.array(paths_end)==np.array(end_node),axis=1))
+            for sid in start_ids[0]:
+                for eid in end_ids[0]:
+                    if sid==eid:
+                        for n in paths[sid]:
+                            draw_path.append(np.append(n,dist_transform[n[1],n[0]]))
+                        break
+        draw_path.extend(np.append(np.array(connetion_path[-1]),dist_transform[connetion_path[-1][1],connetion_path[-1][0]]).reshape(1,-1))
+        
+        if len(draw_path)>min_stroke_length:
+            strokes_split.append(np.array(draw_path))
         count+=1
     print("End tsp...")
-    
+    print("Stroke count: ", len(strokes_split))
     count+=1
+    
 strokes = strokes_split
 
 if save_paths:
@@ -235,4 +257,7 @@ for stroke in strokes:
     for n in stroke:
         image_out = cv2.circle(image_out, (int(n[0]), int(n[1])), round(n[2]), 0, -1)
         cv2.imshow("Image", image_out)
-        cv2.waitKey(0)  
+        if cv2.waitKey(1) == ord('q'): 
+            # press q to terminate the loop 
+            cv2.destroyAllWindows() 
+            break 
