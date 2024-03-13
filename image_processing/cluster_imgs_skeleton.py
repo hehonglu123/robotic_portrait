@@ -185,6 +185,9 @@ while True:
     dfs = DFS(image_skeleton, conj_edge)
     paths,paths_start,paths_end = dfs.find_path_nodes()
     
+    ### another method to find proper nodes
+    image_skeleton_draw = deepcopy(image_skeleton)
+    
     # image_viz = np.zeros_like(image_skeleton)
     # for path in paths:
     #     for n in path:
@@ -216,7 +219,8 @@ while True:
     count=1
     for subg in subgraphs:    
         print("graph: ",count,"/",total_g," nodes: ",subg.number_of_nodes(), " edges: ", subg.number_of_edges())
-        connetion_path = nx.approximation.traveling_salesman_problem(subg, cycle=False)
+        connetion_path = nx.approximation.traveling_salesman_problem(subg, cycle=True)
+        input(connetion_path)
         connetion_path = list(connetion_path)
         if subg.number_of_nodes()>2:
             connetion_path.append(connetion_path[0])

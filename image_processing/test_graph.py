@@ -2,8 +2,8 @@ import networkx as nx
 import matplotlib.pyplot as plt
 
 # Create an empty graph
-G = nx.Graph()
-# G = nx.DiGraph()
+# G = nx.Graph()
+G = nx.DiGraph()
 
 # Add nodes
 # G.add_nodes_from([1, 2, 3, 4, 5])
@@ -17,14 +17,23 @@ G = nx.Graph()
 # Add edges
 # G.add_edges_from([(3, 1), (3, 2), (3, 4), (3, 5)])
 G.add_edge((1,2), (3,4), weight=1)
+G.add_edge((3,4), (1,2), weight=2)
 # G.add_edge((3,4),(1,2))
-G.add_edge((3,4), (5,6), weight=1)
+G.add_edge((3,4), (5,6), weight=3)
+G.add_edge((5,6), (3,4), weight=1)
 G.add_edge((5,6), (7,8), weight=1)
+G.add_edge((7,8), (5,6), weight=2)
 G.add_edge((7,8),(9,10), weight=1)
+G.add_edge((9,10),(7,8), weight=1)
 print(G)
 # Draw the graph
 nx.draw(G, with_labels=True)
 plt.show()
+
+connetion_path = nx.approximation.traveling_salesman_problem(G)
+print(connetion_path)
+exit()
+
 
 G_new = nx.contracted_nodes(G, (5,6), (3,4),self_loops=False)
 nx.draw(G_new, with_labels=True)
