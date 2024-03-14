@@ -110,7 +110,7 @@ q_tracking_start=robot.inv(p_tracking_start,R_tracking_start,q_seed)[0]
 # Orientation of pencil
 R_pencil=ipad_pose[:3,:3]@Ry(np.pi)
 # flipping pose
-p_flip=np.array([-577.69418679,   59.06883188, -111.31898296])
+p_flip=np.array([-577.69418679,   59.06883188, -117])
 q_flip=robot.inv(p_flip,R_pencil,q_seed)[0]
 pose=robot.fwd(q_flip)
 q_flip_top=robot.inv(pose.p+30*ipad_pose[:3,-2],pose.R,q_flip)[0]
