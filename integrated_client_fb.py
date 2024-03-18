@@ -67,7 +67,8 @@ controller_params = {
     "load_speed": 10.0, # Unit mm/sec
     "unload_speed": 1.0, # Unit mm/sec
     'settling_time': 1, # Unit: sec
-    "lookahead_time": 0.132 # Unit: sec
+    "lookahead_time": 0.132, # Unit: sec
+    "jogging_speed": 1 # Unit: mm/sec
     }
 ### Define the motion controller
 mctrl=MotionController(robot,ipad_pose,H_pentip2ati,controller_params,TIMESTEP,USE_RR_ROBOT=True,
@@ -90,14 +91,14 @@ anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
 while True:
     start_time=time.time()
     #jog to initial_position
-    mctrl.jog_joint_position_cmd(q_tracking_start,v=0.2,wait_time=0.5)
+    mctrl.jog_joint_position_cmd(q_tracking_start,v=controller_params['jogging_speed'],wait_time=0.5)
 
     ###################### Face tracking ######################
     q_cmd_prev=q_tracking_start
     while True:
         loop_start_time=time.time()
         wire_packet=bbox_wire.TryGetInValue()
-        q_cur=robot_state.InValue.joint_position
+        q_cur=mctrl.read_position()
 
         if wire_packet[0]:
             bbox=wire_packet[1]
