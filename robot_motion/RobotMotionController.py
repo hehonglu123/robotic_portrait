@@ -37,6 +37,7 @@ class MotionController(object):
         self.robot=robot
         # pose relationship
         self.ipad_pose=ipad_pose
+        self.ipad_pose_inv = np.linalg.inv(self.ipad_pose)
         self.ipad_pose_T = Transform(self.ipad_pose[:3,:3],self.ipad_pose[:3,-1])
         self.H_pentip2ati=H_pentip2ati
         self.H_ati2pentip=np.linalg.inv(H_pentip2ati)
@@ -122,7 +123,10 @@ class MotionController(object):
      
         return self.params["force_ctrl_damping"]*f_err
 
-    def force_load_z(self,fz_des):
+    def force_load_z(self,fz_des,load_speed=None):
+
+        if load_speed is None:
+            load_speed = self.params['load_speed']
 
         touch_t = None
         this_st=None
@@ -146,7 +150,7 @@ class MotionController(object):
             # force control
             tip_next_ipad = deepcopy(tip_now_ipad)
             if np.abs(fz_now) < self.params['force_epsilon'] and touch_t is None: # if not touch ipad
-                tip_next_ipad.p[2] = tip_now_ipad.p[2] + -1*self.params['load_speed'] * self.TIMESTEP # move in -z direction
+                tip_next_ipad.p[2] = tip_now_ipad.p[2] + -1*load_speed * self.TIMESTEP # move in -z direction
             else: # when touch ipad
                 if touch_t is None:
                     touch_t=time.time()
@@ -179,7 +183,7 @@ class MotionController(object):
         
         return ft_record
    
-    def motion_start_procedure(self, js_start, f_start, h_offset, h_offset_low, lin_vel=2):
+    def motion_start_routine(self, js_start, f_start, h_offset, h_offset_low, lin_vel=2):
         
         # jog to start point
         pose_start=self.robot.fwd(js_start)
@@ -204,12 +208,25 @@ class MotionController(object):
         
         return ft_record
     
-    def motion_end_procedure(self, js_end, h_offset, lin_vel=2):
+    def motion_end_routine(self, js_end, h_offset, lin_vel=2):
         # jog to end point z+hoffset
         pose_end=self.robot.fwd(js_end)
         p_end=pose_end.p+h_offset*self.ipad_pose[:3,-2]
         q_end=self.robot.inv(p_end,pose_end.R,js_end)[0]
         self.jog_joint_position_cmd(q_end,v=lin_vel,wait_time=0.5)
+    
+    def press_button_routine(self, p_button, R_button, h_offset=30, lin_vel=2, press_force=2, q_seed=None):
+        
+        if q_seed is None:
+            q_seed=self.read_position()
+        # jog to button point
+        T_button_offset_robot=self.ipad_pose_T*Transform(p_button+np.array([0,0,h_offset]),R_button)
+        T_button_robot=self.ipad_pose_T*Transform(p_button,R_button)
+        q_button_offset=self.robot.inv(T_button_offset_robot.p,T_button_offset_robot.R,q_seed)[0]
+        q_button=self.robot.inv(T_button_robot.p,T_button_robot.R,q_seed)[0]
+        self.jog_joint_position_cmd(q_button_offset,v=lin_vel) # move about the button
+        self.force_load_z(-press_force,load_speed=lin_vel) # press the button
+        self.jog_joint_position_cmd(q_button_offset,v=lin_vel) # move about the button
     
     def trajectory_generate(self,curve_js,curve_xy,force_path,lin_vel=None,lin_acc=None):
     

@@ -99,9 +99,7 @@ if __name__ == "__main__":
     # cv2.waitKey(0)
 
     anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
-    print("here1")
     output = anime.forward(gray_image_masked)
-    print("here2")
     cv2.imwrite(data_dir+img_name+'_out.jpg', output)
     
     output = anime.forward(gray_image)
