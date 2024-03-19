@@ -53,7 +53,7 @@ def travel_pixel_skeletons():
     # TODO: add code to cluster the skeletons
     pass
 
-def travel_pixel_dots(image,resize_ratio=2,max_radias=10,min_radias=2,max_nodes=1500,max_edges=2500,
+def travel_pixel_dots(image,resize_ratio=2,max_radias=10,min_radias=2,max_nodes=1500,max_edges=2500,max_pixel=250000,
                       blank_thres=1.5,leave_paper_weight=2,SHOW_TSP=False):
     
     ## convert image to gray
@@ -74,23 +74,39 @@ def travel_pixel_dots(image,resize_ratio=2,max_radias=10,min_radias=2,max_nodes=
         ## find all black pixels
         black_pixels = np.where(image_thresh == 0)
         print("black pixels: ",len(black_pixels[0])) if SHOW_TSP else None
+        if len(black_pixels[0]) > max_pixel:
+            print("skip... too many pixels", len(black_pixels[0]))
+            shrink_flag = True
+            continue
 
         ##### covered the image with circles ####
         ## create image_covered, image_vis, image_node
         image_covered = deepcopy(image_thresh)
-        image_vis = np.ones_like(image_thresh)
         image_node = np.zeros_like(image_thresh)
         nodes = []
         graph = nx.Graph()
         draw_graph_pos={}
+        black_pixels_not_drew = deepcopy(black_pixels)
         ## loop through radias max_radias to 1
         for radias in range(max_radias,min_radias-1,-1):
             print("radias: ",radias,"/",max_radias) if SHOW_TSP else None
+            image_thresh_not=np.logical_not(image_thresh)
+            dist_img = cv2.distanceTransform(image_thresh_not.astype(np.uint8), cv2.DIST_L2, 3)
             ## loop through all black pixels
-            for i in range(len(black_pixels[0])):
+            st=time.time()
+            black_pixels_not_drew_next = [[],[]]
+            for i in range(len(black_pixels_not_drew[0])):
                 ## get x and y of black pixel
                 x = black_pixels[1][i]
                 y = black_pixels[0][i]
+                
+                if i%10000==0:
+                    print("time pass",time.time()-st,i,"/",len(black_pixels_not_drew[0])," pixels") if SHOW_TSP else None
+                    
+                if dist_img[y,x] < radias-2:
+                    black_pixels_not_drew_next[0].append(y)
+                    black_pixels_not_drew_next[1].append(x)
+                    continue
                 
                 image_white = np.ones_like(image_thresh)
                 image_circle = cv2.circle(image_white, (x, y), radias, 0, -1)
@@ -98,24 +114,26 @@ def travel_pixel_dots(image,resize_ratio=2,max_radias=10,min_radias=2,max_nodes=
                 # valid_circle = check_circle_valid(image_thresh, image_circle, x, y, radias)
                 valid_circle = check_circle_valid(image_covered, image_circle, x, y, radias)
                 if not valid_circle:
+                    black_pixels_not_drew_next[0].append(y)
+                    black_pixels_not_drew_next[1].append(x)
                     continue
                 ## check if new pixel covered
                 covered_pixel = check_new_pixel_covered(image_covered, image_circle, x, y, radias)
                 if not covered_pixel:
+                    black_pixels_not_drew_next[0].append(y)
+                    black_pixels_not_drew_next[1].append(x)
                     continue
                 
                 ## image_covered at x y has value of radias
                 image_circle = np.logical_not(image_circle)
                 image_covered = np.logical_or(image_covered, image_circle)
-
-                ## image_vis at x y has value of radias
-                image_vis = cv2.circle(image_vis, (x, y), radias, 0, -1)
                 
                 ## add node
                 image_node[y,x] = radias
                 nodes.append([x,y,radias])
                 graph.add_node((x,y),width=radias) ## add circle center pixel as nodes
                 draw_graph_pos[(x,y)]=(x,y)
+            black_pixels_not_drew = black_pixels_not_drew_next
         
         for i in range(len(nodes)):
             for j in range(i+1,len(nodes)):
