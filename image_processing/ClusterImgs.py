@@ -181,7 +181,7 @@ def travel_pixel_dots(image,resize_ratio=2,max_radias=10,min_radias=2,max_nodes=
             this_p = list(all_paths[i][j])
             this_p.append(width)
             stroke.append(this_p)
-        strokes_split.append(stroke)
+        strokes_split.append(np.array(stroke))
     strokes=strokes_split
     
     return strokes, image_thresh

@@ -11,9 +11,9 @@ def main():
     # img_name='wen_out'
     # img_name='strokes_out'
     # img_name='wen_name_out'
-    # img_name='me_out'
+    img_name='me_out'
     # img_name='new_year_out'
-    img_name='ilc_path1'
+    # img_name='ilc_path1'
     image=cv2.imread(CODE_PATH+'imgs/'+img_name+'.png')
     image_center=np.array([image.shape[1]/2,image.shape[0]/2])
     num_segments=len(glob.glob(CODE_PATH+'path/cartesian_path/'+img_name+'/*.csv'))

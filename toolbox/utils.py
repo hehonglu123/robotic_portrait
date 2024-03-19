@@ -16,6 +16,11 @@ def force_prop(tf,T):###propagate force from sensor to the tip
 	force_tip=tf[3:]+np.cross(tf[:3],T)
 	return np.linalg.norm(force_tip)
 
+def adjoint_map(T):
+    R=T.R
+    p=T.p
+    return np.vstack((np.hstack((R,np.zeros((3,3)))),np.hstack((hat(p)@R,R))))
+
 
 def rotate_vector_at_angle(u, v, theta_rad):
     ###rotate u to v at angle theta

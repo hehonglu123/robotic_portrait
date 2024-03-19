@@ -15,21 +15,28 @@ from RobotMotionController import *
 
 ROBOT_NAME='ABB_1200_5_90' # ABB_1200_5_90 or ur5
 FORCE_FEEDBACK=False
+USE_RR_ROBOT=False
 
 if ROBOT_NAME=='ABB_1200_5_90':
     #########################################################config parameters#########################################################
     robot_cam=robot_obj(ROBOT_NAME,'config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/camera.csv')
-    robot=robot_obj(ROBOT_NAME,'config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen2.csv')
+    robot=robot_obj(ROBOT_NAME,'config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
     radius=500 ###eef position to robot base distance w/o z height
-    angle_range=np.array([-3*np.pi/4,-np.pi/4]) ###angle range of joint 1 for robot to move
-    height_range=np.array([500,900]) ###height range for robot to move
-    p_start=np.array([0,-radius,700])	###initial position
-    R_start=np.array([	[0,1,0],
-                        [0,0,-1],
-                        [-1,0,0]])	###initial orientation
-    q_start=robot_cam.inv(p_start,R_start,np.zeros(6))[0]	###initial joint position
+    # angle_range=np.array([-3*np.pi/4,-np.pi/4]) ###angle range of joint 1 for robot to move
+    angle_range=np.array([-np.pi/2,0]) ###angle range of joint 1 for robot to move
+    height_range=np.array([500,1500]) ###height range for robot to move
+    # p_start=np.array([0,-radius,700])	###initial position
+    # R_start=np.array([	[0,1,0],
+    #                     [0,0,-1],
+    #                     [-1,0,0]])	###initial orientation
+    p_tracking_start=np.array([ 107.2594, -196.3541,  859.7145])	###initial position
+    R_tracking_start=np.array([[ 0.0326 , 0.8737 , 0.4854],
+                            [ 0.0888,  0.4812, -0.8721],
+                            [-0.9955 , 0.0715, -0.0619]])	###initial orientation
+    q_seed=np.zeros(6)
+    q_tracking_start=robot_cam.inv(p_tracking_start,R_tracking_start,q_seed)[0]	###initial joint position
     image_center=np.array([1080,1080])/2	###image center
-    RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
+    RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot') if USE_RR_ROBOT else None
     TIMESTEP=0.004
 elif ROBOT_NAME=='ur5':
     #########################################################UR config parameters#########################################################
@@ -61,6 +68,9 @@ ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',') # ipad pose
 H_pentip2ati=np.loadtxt('config/pentip2ati.csv',delimiter=',') # FT sensor info
 p_button=[] # button position
 hover_height=20 # height to hover above the paper
+face_track_speed=20 # speed to track face
+face_track_x = np.array([-np.sin(np.arctan2(p_tracking_start[1],p_tracking_start[0])),np.cos(np.arctan2(p_tracking_start[1],p_tracking_start[0])),0])
+face_track_y = np.array([0,0,1])
 ######## Controller parameters ###
 controller_params = {
     "force_ctrl_damping": 60.0, # 180, 90, 60
@@ -76,7 +86,7 @@ controller_params = {
     "jogging_speed": 10 # Unit: mm/sec
     }
 ### Define the motion controller
-mctrl=MotionController(robot,ipad_pose,H_pentip2ati,controller_params,TIMESTEP,USE_RR_ROBOT=True,
+mctrl=MotionController(robot,ipad_pose,H_pentip2ati,controller_params,TIMESTEP,USE_RR_ROBOT=USE_RR_ROBOT,
                  RR_robot_sub=RR_robot_sub,FORCE_PROTECTION=5,RR_ati_cli=RR_ati_cli)
 
 ###### Face tracking RR client ######
@@ -92,6 +102,9 @@ face_tracking_sub.ClientConnectFailed += connect_failed
 faceseg = FaceSegmentation()
 anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
 
+# print(robot.fwd(mctrl.read_position()))
+# exit()
+
 #########################################################EXECUTION#########################################################
 while True:
     start_time=time.time()
@@ -99,47 +112,58 @@ while True:
     mctrl.jog_joint_position_cmd(q_tracking_start,v=controller_params['jogging_speed'],wait_time=0.5)
 
     ###################### Face tracking ######################
+    print("FACE TRACKING")
     q_cmd_prev=q_tracking_start
     while True:
         loop_start_time=time.time()
         wire_packet=bbox_wire.TryGetInValue()
         
+        
         q_cur=mctrl.read_position()
         if mctrl.USE_RR_ROBOT:
             time.sleep(mctrl.TIMESTEP)
-
+        
         if wire_packet[0]:
             bbox=wire_packet[1]
             if len(bbox)==0: #if no face detected, jog to initial position
                 diff=q_tracking_start-q_cur
-                if np.linalg.norm(diff)>0.1:
+                if np.linalg.norm(diff)>face_track_speed/2:
                     qdot=diff/np.linalg.norm(diff)
                 else:
                     qdot=diff
             else:	#if face detected
                 pose_cur=robot_cam.fwd(q_cur)
                 if q_cur[0]<angle_range[0] or q_cur[0]>angle_range[1] or pose_cur.p[2]<height_range[0] or pose_cur.p[2]>height_range[1]:
+                    # print('out of range')
                     continue
                 #calculate size of bbox
                 size=np.array([bbox[2]-bbox[0],bbox[3]-bbox[1]])
                 #calculate center of bbox
                 center=np.array([bbox[0]+size[0]/2,bbox[1]+size[1]/2])
-                z_gain=-1
-                x_gain=-1e-3
-                zd=center[1]-image_center[1]
+                y_gain=-0.08
+                x_gain=-0.08
+                yd=center[1]-image_center[1]
                 xd=center[0]-image_center[0]
-                try:
-                    q_temp=robot_cam.inv(pose_cur.p+zd*np.array([0,0,z_gain]),pose_cur.R,q_cur)[0]
-                except:
-                    continue
-                q_temp+=xd*np.array([x_gain,0,0,0,0,0])
-                q_diff=q_temp-q_cur
-                if np.linalg.norm(q_diff)>0.8:
-                    qdot=0.8*q_diff/np.linalg.norm(q_diff)
-                else:
-                    qdot=q_diff
+                # try:
+                #     q_temp=robot_cam.inv(pose_cur.p+zd*np.array([0,0,z_gain]),pose_cur.R,q_cur)[0]
+                # except:
+                #     continue
+                # q_temp+=xd*np.array([x_gain,0,0,0,0,0])
+                # q_diff=q_temp-q_cur
+                # if np.linalg.norm(q_diff)>face_track_speed:
+                #     qdot=face_track_speed*q_diff/np.linalg.norm(q_diff)
+                # else:
+                #     qdot=q_diff
+                vdot = (x_gain*xd*face_track_x + y_gain*yd*face_track_y)
                 
-                if np.linalg.norm(qdot)<0.1:
+                if np.linalg.norm(vdot)>face_track_speed:
+                    vdot=face_track_speed*vdot/np.linalg.norm(vdot)
+                print(vdot)
+                print(np.linalg.norm(vdot))
+                J_mat = robot.jacobian(q_cur)
+                qdot = np.linalg.pinv(J_mat)@np.append(np.zeros(3),vdot)
+                
+                if np.linalg.norm(vdot)<3:
                     # print(time.time()-start_time)
                     if time.time()-start_time>3:
                         break
@@ -161,6 +185,9 @@ while True:
 
     print('IMAGE TAKEN')
     cv2.imwrite('img.jpg',img)
+
+    cv2.imshow('img',img)
+    cv2.waitKey(0)
     ############################################################
 
     ########################## portrait FaceSegmentation/GAN ##############################
@@ -176,6 +203,9 @@ while True:
     anime_img = anime.forward(gray_image_masked)
     img_gray=cv2.cvtColor(anime_img, cv2.COLOR_BGR2GRAY)
     cv2.imwrite('img_out.jpg',anime_img)
+
+    cv2.imshow('img',anime_img)
+    cv2.waitKey(0)
     ####################################################################
     
     ####################################PLANNING#####################################################

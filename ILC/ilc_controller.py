@@ -30,11 +30,6 @@ def spline_js(cartesian_path,curve_js,vd,rate=250):
     lam=np.linspace(0,lam[-1],int(rate*lam[-1]/vd))
     return polyfit(lam)
 
-def adjoint_map(T):
-    R=T.R
-    p=T.p
-    return np.vstack((np.hstack((R,np.zeros((3,3)))),np.hstack((hat(p)@R,R))))
-
 class MotionILController(object):
     def __init__(self,robot,ipad_pose,H_pentip2ati,controller_param):
         
@@ -396,7 +391,7 @@ def main():
     # img_name='wen_name_out'
     # img_name='me_out'
     # img_name='new_year_out'
-    img_name='ilc_path2'
+    img_name='ilc_path1'
 
     visualize=False
 
@@ -434,7 +429,7 @@ def main():
 
     # parameters
     h_offset = 20
-    h_offset_low = 1
+    h_offset_low = 5
     joging_speed = 15
     force_smooth_n = 11
     motion_smooth_n = 1

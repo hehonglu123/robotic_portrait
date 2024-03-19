@@ -13,8 +13,8 @@ from robot_def import *
 from lambda_calc import *
 from motion_toolbox import *
 
-FORCE_PROTECTION = 5  # Force protection. Units: N
-SHOW_STATUS = False
+FORCE_PROTECTION = 2.5  # Force protection. Units: N
+SHOW_STATUS = True
 
 USE_RR_ROBOT = False
 
@@ -180,6 +180,7 @@ class MotionController(object):
 
         # transform to tip desired
         fz_des = fz_des*(-1)
+        print("fz_des: ",fz_des)
         # check if fz_des is a number or list
         if isinstance(fz_des,(int,float)):
             fz_des = np.ones(len(q_all))*fz_des
@@ -225,7 +226,7 @@ class MotionController(object):
         ft_record=[]
         while time.time()-start_time<time_bp[-1]:
             # joint reading
-            q_now = self.robot_state.InValue.joint_position
+            q_now = self.read_position()
             tip_now = self.robot.fwd(q_now)
             tip_now_ipad = self.ipad_pose_T.inv()*tip_now
             # read force
@@ -262,7 +263,11 @@ class MotionController(object):
             fz_des_lookahead = frac_lookahead*fz_des[seg_lookahead]+(1-frac_lookahead)*fz_des[seg_lookahead-1]
             # f_err = fz_des_now-fz_now # feedback error
             f_err = fz_des_lookahead-fz_now # feedback error lookahead
+            print(fz_des_lookahead)
+            print(fz_now)
             v_des_z = self.force_impedence_ctrl(f_err) # force control
+            print(v_des_z)
+            print("====================")
             if np.linalg.norm(ft_tip[3:])>FORCE_PROTECTION: # force protection break
                 print("force: ",ft_tip[3:])
                 print("force too large")
@@ -288,18 +293,21 @@ class MotionController(object):
     
     def jog_joint_position_cmd(self,q,v=0.4,wait_time=0):
 
-        q_start=self.robot_state.InValue.joint_position
+        q_start=self.read_position()
         total_time=np.linalg.norm(q-q_start)/v
 
         start_time=time.time()
         while time.time()-start_time<total_time:
+            self.read_position()
             # Set the joint command
             frac=(time.time()-start_time)/total_time
             self.position_cmd(frac*q+(1-frac)*q_start)
+            time.sleep(self.TIMESTEP)
             
         ###additional points for accuracy
         start_time=time.time()
         while time.time()-start_time<wait_time:
+            self.read_position()
             self.position_cmd(q)
     
     def trajectory_position_cmd(self,q_all,v=0.4):
@@ -325,8 +333,8 @@ def main():
     # img_name='wen_out'
     # img_name='strokes_out'
     # img_name='strokes_out_3'
-    img_name='wen_name_out'
-    # img_name='me_out'
+    # img_name='wen_name_out'
+    img_name='me_out'
     # img_name='new_year_out'
 
     visualize=False
@@ -334,19 +342,19 @@ def main():
     print("Drawing %s"%img_name)
     time.sleep(1)
 
-    ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
-    num_segments=len(glob.glob('path/cartesian_path/'+img_name+'/*.csv'))
-    robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
+    ipad_pose=np.loadtxt('../config/ipad_pose.csv',delimiter=',')
+    num_segments=len(glob.glob('../path/cartesian_path/'+img_name+'/*.csv'))
+    robot=robot_obj('ABB_1200_5_90','../config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='../config/heh6_pen.csv')
     # robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/heh6_pen_ur.csv')
     # print(robot.fwd(np.array([0,0,0,0,0,0])))
     # exit()
 
     ######## FT sensor info
-    H_pentip2ati=np.loadtxt('config/pentip2ati.csv',delimiter=',')
+    H_pentip2ati=np.loadtxt('../config/pentip2ati.csv',delimiter=',')
  
     ######## Controller parameters ###
     controller_params = {
-        "force_ctrl_damping": 180.0,
+        "force_ctrl_damping": 60, # 180.0,
         "force_epsilon": 0.1, # Unit: N
         "moveL_speed_lin": 3.0, # Unit: mm/sec
         "moveL_acc_lin": 1.0, # Unit: mm/sec^2
@@ -355,7 +363,7 @@ def main():
         "load_speed": 10.0, # Unit mm/sec
         "unload_speed": 1.0, # Unit mm/sec
         'settling_time': 1, # Unit: sec
-        "lookahead_time": 0.02 # Unit: sec
+        "lookahead_time": 0.1 # Unit: sec
         }
     
     ######## Motion Controller ###
@@ -368,8 +376,8 @@ def main():
         print('Segment %i'%i)
         # pixel_path=np.loadtxt('path/pixel_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,3))
         # cartesian_path=np.loadtxt('path/cartesian_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,3))
-        curve_js=np.loadtxt('path/js_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,6))
-        force_path=np.loadtxt('path/force_path/'+img_name+'/%i.csv'%i,delimiter=',')
+        curve_js=np.loadtxt('../path/js_path/'+img_name+'/%i.csv'%i,delimiter=',').reshape((-1,6))
+        force_path=np.loadtxt('../path/force_path/'+img_name+'/%i.csv'%i,delimiter=',')
         
         # constant force
         # force_path = np.ones(len(curve_js))*F_des
@@ -378,7 +386,7 @@ def main():
 
             pose_start=robot.fwd(curve_js[0])
             h_offset = 20
-            h_offset_low = 1
+            h_offset_low = 5
             if start:
                 
                 #jog to starting point
@@ -400,10 +408,10 @@ def main():
                 #arc-like trajectory to next segment
                 p_start=pose_start.p+h_offset*ipad_pose[:3,-2]
                 q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
-                pose_cur=robot.fwd(mctrl.robot_state.InValue.joint_position)
+                pose_cur=robot.fwd(mctrl.read_position())
                 p_mid=(pose_start.p+pose_cur.p)/2+h_offset*ipad_pose[:3,-2]
                 q_mid=robot.inv(p_mid,pose_start.R,curve_js[0])[0]
-                mctrl.trajectory_position_cmd(np.vstack((mctrl.robot_state.InValue.joint_position,q_mid,q_start)),v=0.2)
+                mctrl.trajectory_position_cmd(np.vstack((mctrl.read_position(),q_mid,q_start)),v=0.2)
                 #jog to starting point
                 mctrl.jog_joint_position_cmd(q_start,wait_time=0.3)
                 p_start=pose_start.p+h_offset_low*ipad_pose[:3,-2]
@@ -443,8 +451,8 @@ def main():
     for i in range(len(ft_record_load)):
         ft_record_load[i]=np.array(ft_record_load[i])
         ft_record_move[i]=np.array(ft_record_move[i])
-        np.savetxt('record/ft_record_load_%i.csv'%i,ft_record_load[i],delimiter=',')
-        np.savetxt('record/ft_record_move_%i.csv'%i,ft_record_move[i],delimiter=',')
+        np.savetxt('../record/ft_record_load_%i.csv'%i,ft_record_load[i],delimiter=',')
+        np.savetxt('../record/ft_record_move_%i.csv'%i,ft_record_move[i],delimiter=',')
     
     ## direct visualization
     if visualize:

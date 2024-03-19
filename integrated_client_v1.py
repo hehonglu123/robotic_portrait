@@ -300,10 +300,12 @@ while True:
 				start=False
 			else:
 				pose_cur=robot.fwd(robot_state.InValue.joint_position)
-				p_mid=(pose_start.p+pose_cur.p)/2+15*ipad_pose[:3,-2]
-				q_mid=robot.inv(p_mid,pose_start.R,curve_js[0])[0]
+				p_mid1=pose_cur.p+20*ipad_pose[:3,-2]
+				q_mid1=robot.inv(p_mid1,pose_start.R,curve_js[0])[0]
+				p_mid2=pose_start.p+20*ipad_pose[:3,-2]
+				q_mid2=robot.inv(p_mid2,pose_start.R,curve_js[0])[0]
 				#arc-like trajectory to next segment
-				trajectory_position_cmd(np.vstack((robot_state.InValue.joint_position,q_mid,curve_js[0])),v=0.2)
+				trajectory_position_cmd(np.vstack((robot_state.InValue.joint_position,q_mid1,q_mid2,curve_js[0])),v=0.2)
 				jog_joint_position_cmd(curve_js[0],wait_time=0.1)
 
 			#drawing trajectory

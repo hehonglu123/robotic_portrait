@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import glob, cv2, sys, time
 from sklearn.decomposition import PCA
+from general_robotics_toolbox import *
 
 sys.path.append('toolbox')
 from robot_def import *
@@ -53,11 +54,25 @@ def get_force_ur(jacobian,torque):
 	torque_act=torque-gravity_torque
 	return np.linalg.pinv(jacobian)@torque_act
 
+def wrench_wire_cb(w,value,time):
+	global ft_reading
+	ft_reading = np.array([value['torque']['x'],value['torque']['y'],value['torque']['z'],value['force']['x'],value['force']['y'],value['force']['z']])
+
 
 ####################################################FT Connection####################################################
-ati_tf=NET_FT('192.168.60.100')
-ati_tf.start_streaming()
+# ati_tf=NET_FT('192.168.60.100')
+# ati_tf.start_streaming()
 H_pentip2ati=np.loadtxt('config/pentip2ati.csv',delimiter=',')
+H_ati2pentip=np.linalg.inv(H_pentip2ati)
+ad_ati2pentip=adjoint_map(Transform(H_ati2pentip[:3,:3],H_ati2pentip[:3,-1]))
+ad_ati2pentip_T=ad_ati2pentip.T
+#################### FT Connection ####################
+RR_ati_cli=RRN.ConnectService('rr+tcp://localhost:59823?service=ati_sensor')
+#Connect a wire connection
+wrench_wire = RR_ati_cli.wrench_sensor_value.Connect()
+#Add callback for when the wire value change
+wrench_wire.WireValueChanged += wrench_wire_cb
+ft_reading=np.zeros(6)
 
 #########################################################RR PARAMETERS#########################################################
 RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58651?service=robot')
@@ -98,13 +113,20 @@ corners=np.dot(ipad_pose[:3,:3],corners_offset.T).T+np.tile(ipad_pose[:3,-1],(4,
 
 ###loop four corners to get precise position base on force feedback
 corners_adjusted=[]
-f_d=5	#10N push down
+f_d=0.8	#10N push down
 for corner in corners:
 	corner_top=corner+20*ipad_pose[:3,-2]
 	q_corner_top=robot.inv(corner_top,R_pencil,q_seed)[0]	###initial joint position
-	jog_joint_position_cmd(q_corner_top,v=0.2)
+	jog_joint_position_cmd(q_corner_top,v=0.2,wait_time=0.5)
 
-	ati_tf.set_tare_from_ft()	#clear bias
+	time.sleep(0.5)
+	# ati_tf.set_tare_from_ft()	#clear bias
+	RR_ati_cli.setf_param("set_tare", RR.VarValue(True, "bool")) # clear bias
+	# res, tf, status = ati_tf.try_read_ft_streaming(.1)###get force feedback
+	time.sleep(0.5)
+	RR_ati_cli.setf_param("set_tare", RR.VarValue(True, "bool")) # clear bias
+	time.sleep(0.5)
+	input(ft_reading)
 
 	qdot=np.linalg.pinv(robot.jacobian(q_corner_top))@np.hstack((np.zeros(3),-ipad_pose[:3,-2]))		#motion direction
 	K=0.02
@@ -113,9 +135,16 @@ for corner in corners:
 	while f_cur<f_d:
 		position_cmd(q_cur+K*(f_d-f_cur)*qdot)
 		q_cur=q_cur+K*qdot
-		res, tf, status = ati_tf.try_read_ft_streaming(.1)###get force feedback
-		f_cur=force_prop(tf,H_pentip2ati[:-1,-1])
-		print(f_cur)
+		# res, tf, status = ati_tf.try_read_ft_streaming(.1)###get force feedback
+		# f_cur=force_prop(tf,H_pentip2ati[:-1,-1])
+		ft_tip = ad_ati2pentip_T@ft_reading
+		fz_now = float(ft_tip[-1])
+		ft_tip_norm = np.linalg.norm(ft_tip[3:])
+		print(fz_now,ft_tip_norm)
+		# f_cur = fz_now*-1
+		f_cur = ft_tip_norm
+		print(ft_reading,f_cur)
+		time.sleep(0.004)
 	
 	corners_adjusted.append(robot.fwd(q_cur).p)
 

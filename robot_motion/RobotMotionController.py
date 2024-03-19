@@ -215,7 +215,7 @@ class MotionController(object):
         q_end=self.robot.inv(p_end,pose_end.R,js_end)[0]
         self.jog_joint_position_cmd(q_end,v=lin_vel,wait_time=0.5)
     
-    def press_button_routine(self, p_button, R_button, h_offset=30, lin_vel=2, press_force=2, q_seed=None):
+    def press_button_routine(self, p_button, R_button, h_offset=30, lin_vel=2, press_force=1, q_seed=None):
         
         if q_seed is None:
             q_seed=self.read_position()

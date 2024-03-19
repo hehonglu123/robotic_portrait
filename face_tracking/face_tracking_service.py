@@ -138,7 +138,7 @@ def create_pipeline():
 	return pipeline
 
 
-VIZ_FRAME=False
+VIZ_FRAME=True
 frame_viz=None
 
 RRC.RegisterStdRobDefServiceTypes(RRN)
