@@ -68,9 +68,10 @@ ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',') # ipad pose
 H_pentip2ati=np.loadtxt('config/pentip2ati.csv',delimiter=',') # FT sensor info
 p_button=[] # button position
 hover_height=20 # height to hover above the paper
-face_track_speed=20 # speed to track face
+face_track_speed=0.8 # speed to track face
 face_track_x = np.array([-np.sin(np.arctan2(p_tracking_start[1],p_tracking_start[0])),np.cos(np.arctan2(p_tracking_start[1],p_tracking_start[0])),0])
 face_track_y = np.array([0,0,1])
+smallest_lam = 20 # smallest path length (unit: mm)
 ######## Controller parameters ###
 controller_params = {
     "force_ctrl_damping": 60.0, # 180, 90, 60
@@ -120,50 +121,49 @@ while True:
         
         
         q_cur=mctrl.read_position()
+        pose_cur=robot_cam.fwd(q_cur)
         if mctrl.USE_RR_ROBOT:
             time.sleep(mctrl.TIMESTEP)
         
         if wire_packet[0]:
             bbox=wire_packet[1]
-            if len(bbox)==0: #if no face detected, jog to initial position
+            if len(bbox)==0 or (q_cur[0]<angle_range[0] or q_cur[0]>angle_range[1] or pose_cur.p[2]<height_range[0] or pose_cur.p[2]>height_range[1]):
+                 # if no face detected, or out of range
+                 # jog to initial position
                 diff=q_tracking_start-q_cur
                 if np.linalg.norm(diff)>face_track_speed/2:
                     qdot=diff/np.linalg.norm(diff)
                 else:
                     qdot=diff
             else:	#if face detected
-                pose_cur=robot_cam.fwd(q_cur)
-                if q_cur[0]<angle_range[0] or q_cur[0]>angle_range[1] or pose_cur.p[2]<height_range[0] or pose_cur.p[2]>height_range[1]:
-                    # print('out of range')
-                    continue
                 #calculate size of bbox
                 size=np.array([bbox[2]-bbox[0],bbox[3]-bbox[1]])
                 #calculate center of bbox
                 center=np.array([bbox[0]+size[0]/2,bbox[1]+size[1]/2])
-                y_gain=-0.08
-                x_gain=-0.08
+                y_gain=-1 # -0.8
+                x_gain=-0.001 # -0.08
                 yd=center[1]-image_center[1]
                 xd=center[0]-image_center[0]
-                # try:
-                #     q_temp=robot_cam.inv(pose_cur.p+zd*np.array([0,0,z_gain]),pose_cur.R,q_cur)[0]
-                # except:
-                #     continue
-                # q_temp+=xd*np.array([x_gain,0,0,0,0,0])
-                # q_diff=q_temp-q_cur
-                # if np.linalg.norm(q_diff)>face_track_speed:
-                #     qdot=face_track_speed*q_diff/np.linalg.norm(q_diff)
-                # else:
-                #     qdot=q_diff
-                vdot = (x_gain*xd*face_track_x + y_gain*yd*face_track_y)
+                try:
+                    q_temp=robot_cam.inv(pose_cur.p+yd*np.array([0,0,y_gain]),pose_cur.R,q_cur)[0]
+                except:
+                    continue
+                q_temp+=xd*np.array([x_gain,0,0,0,0,0])
+                q_diff=q_temp-q_cur
+                if np.linalg.norm(q_diff)>face_track_speed:
+                    qdot=face_track_speed*q_diff/np.linalg.norm(q_diff)
+                else:
+                    qdot=q_diff
+                # vdot = (x_gain*xd*face_track_x + y_gain*yd*face_track_y)
+                # vdot = y_gain*yd*face_track_y
                 
-                if np.linalg.norm(vdot)>face_track_speed:
-                    vdot=face_track_speed*vdot/np.linalg.norm(vdot)
-                print(vdot)
-                print(np.linalg.norm(vdot))
-                J_mat = robot.jacobian(q_cur)
-                qdot = np.linalg.pinv(J_mat)@np.append(np.zeros(3),vdot)
+                # if np.linalg.norm(vdot)>face_track_speed:
+                #     vdot=face_track_speed*vdot/np.linalg.norm(vdot)
+                # J_mat = robot.jacobian(q_cur)
+                # qdot = np.linalg.pinv(J_mat)@np.append(np.zeros(3),vdot)
+                # qdot = qdot + np.array([xd*x_gain,0,0,0,0,0])
                 
-                if np.linalg.norm(vdot)<3:
+                if np.linalg.norm(qdot)<0.1:
                     # print(time.time()-start_time)
                     if time.time()-start_time>3:
                         break
@@ -239,6 +239,8 @@ while True:
         curve_xy = curve_xyz[:,:2] # get xy curve
         fz_des = force_path*(-1) # transform to tip desired
         lam = calc_lam_js(curve_js,mctrl.robot) # get path length
+        if lam[-1] < smallest_lam:
+            continue
         traj_q, traj_xy, traj_fz, time_bp = mctrl.trajectory_generate(curve_js,curve_xy,fz_des) # get trajectory and time_bp
         #### motion start ###
         mctrl.motion_start_procedure(traj_q[0],traj_fz[0],hover_height,1,lin_vel=controller_params['jogging_speed'])
