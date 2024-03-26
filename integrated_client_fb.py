@@ -73,6 +73,7 @@ hover_height=20 # height to hover above the paper
 face_track_speed=0.8 # speed to track face
 face_track_x = np.array([-np.sin(np.arctan2(p_tracking_start[1],p_tracking_start[0])),np.cos(np.arctan2(p_tracking_start[1],p_tracking_start[0])),0])
 face_track_y = np.array([0,0,1])
+target_size=[1200,800]
 smallest_lam = 20 # smallest path length (unit: mm)
 ######## Controller parameters ###
 controller_params = {
@@ -199,14 +200,7 @@ while True:
 
     ########################## portrait FaceSegmentation/GAN ##############################
     ## Face Segmentation
-    image_mask = faceseg.forward_faceonly(img)
-    #convert dark pixels to bright pixels
-    gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray_image_masked = cv2.bitwise_and(gray_image, gray_image, mask = image_mask)
-    # get second masked value (background) mask must be inverted
-    background = np.full(gray_image.shape, 255, dtype=np.uint8)
-    bk = cv2.bitwise_and(background, background, mask=cv2.bitwise_not(image_mask))
-    gray_image_masked = cv2.add(gray_image_masked, bk)
+    gray_image_masked,image_mask,face_mask = faceseg.get_face_mask(img)
     anime_img = anime.forward(gray_image_masked)
     img_gray=cv2.cvtColor(anime_img, cv2.COLOR_BGR2GRAY)
     cv2.imwrite('img_out.jpg',anime_img)
@@ -220,7 +214,9 @@ while True:
     planning_st = time.time()
     ###Pixel Traversal
     print('TRAVERSING PIXELS')
-    pixel_paths, image_thresh = travel_pixel_dots(anime_img,resize_ratio=4,max_radias=10,min_radias=2,SHOW_TSP=True)
+    face_drawing_order=[10,1,6,7,8,9,2,3,4,5,0]
+    resize_ratio=np.max(np.divide(target_size,anime_img.shape[:2]))
+    pixel_paths, image_thresh = travel_pixel_dots(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=image_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
     print("Image size: ", image_thresh.shape)
     ###Project to IPAD
     print("PROJECTING TO IPAD")

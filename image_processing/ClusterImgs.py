@@ -54,22 +54,26 @@ def travel_pixel_skeletons():
     pass
 
 def travel_pixel_dots(image,resize_ratio=2,max_radias=10,min_radias=2,max_nodes=1500,max_edges=2500,max_pixel=250000,
-                      blank_thres=1.5,leave_paper_weight=2,SHOW_TSP=False):
+                      blank_thres=1.5,leave_paper_weight=2,face_mask=None,face_drawing_order=[],skip_background=False,SHOW_TSP=False):
     
     ## convert image to gray
     image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     
     shrink_flag = False
+    dot_st=time.time()
     while True:
         ## shrink size
         if shrink_flag:
-            resize_ratio = resize_ratio*0.9
+            resize_ratio = resize_ratio*0.95
             shrink_flag = False
         ## thresholding
         _, image_thresh = cv2.threshold(image_gray, 200, 255, cv2.THRESH_BINARY)
 
         # resize image
         image_thresh = cv2.resize(image_thresh, (int(image_thresh.shape[1]*resize_ratio), int(image_thresh.shape[0]*resize_ratio)), interpolation = cv2.INTER_NEAREST)
+        if face_mask is not None:
+            face_mask = cv2.resize(face_mask, (int(image_thresh.shape[1]*resize_ratio), int(image_thresh.shape[0]*resize_ratio)), interpolation = cv2.INTER_NEAREST)
+        print("image size: ",image_thresh.shape) if SHOW_TSP else None
 
         ## find all black pixels
         black_pixels = np.where(image_thresh == 0)
@@ -83,7 +87,11 @@ def travel_pixel_dots(image,resize_ratio=2,max_radias=10,min_radias=2,max_nodes=
         ## create image_covered, image_vis, image_node
         image_covered = deepcopy(image_thresh)
         image_node = np.zeros_like(image_thresh)
-        nodes = []
+        # nodes = []
+        nodes = {0:[]}
+        if face_mask is not None or len(face_drawing_order) > 0:
+            for i in range(len(face_drawing_order)):
+                nodes[i] = []
         graph = nx.Graph()
         draw_graph_pos={}
         black_pixels_not_drew = deepcopy(black_pixels)
@@ -130,23 +138,34 @@ def travel_pixel_dots(image,resize_ratio=2,max_radias=10,min_radias=2,max_nodes=
                 
                 ## add node
                 image_node[y,x] = radias
-                nodes.append([x,y,radias])
+                if face_mask is not None or len(face_drawing_order) > 0:
+                    face_seg = face_mask[y,x]
+                    nodes[face_seg].append([x,y,radias])
+                else:
+                    nodes[0].append([x,y,radias])
                 graph.add_node((x,y),width=radias) ## add circle center pixel as nodes
                 draw_graph_pos[(x,y)]=(x,y)
             black_pixels_not_drew = black_pixels_not_drew_next
         
-        for i in range(len(nodes)):
-            for j in range(i+1,len(nodes)):
-                dist = np.sqrt((nodes[i][0]-nodes[j][0])**2 + (nodes[i][1]-nodes[j][1])**2)
-                if dist < nodes[i][2]+nodes[j][2]+blank_thres:
-                    # graph.add_node(((nodes[i][0]+nodes[j][0])/2,(nodes[i][1]+nodes[j][1])/2))
-                    # graph.add_edge((nodes[i][0],nodes[i][1]),((nodes[i][0]+nodes[j][0])/2,(nodes[i][1]+nodes[j][1])/2))
-                    # graph.add_edge((nodes[j][0],nodes[j][1]),((nodes[i][0]+nodes[j][0])/2,(nodes[i][1]+nodes[j][1])/2))
-                    graph.add_edge((nodes[i][0],nodes[i][1]),(nodes[j][0],nodes[j][1]),weight=dist)
-                    image_node = cv2.line(image_node, (nodes[i][0],nodes[i][1]), (nodes[j][0],nodes[j][1]), max(nodes[i][2],nodes[j][2]), 1)
-                else:
-                    # graph.add_edge((nodes[i][0],nodes[i][1]),(nodes[j][0],nodes[j][1]),weight=dist*leave_paper_weight)
-                    pass
+        print("dotting time pass",time.time()-dot_st) if SHOW_TSP else None
+        
+        tsp_st=time.time()
+        if 0 not in face_drawing_order:
+            face_drawing_order.append(0)
+        
+        for face_seg in face_drawing_order:
+            for i in range(len(nodes[face_seg])):
+                for j in range(i+1,len(nodes[face_seg])):
+                    dist = np.sqrt((nodes[face_seg][i][0]-nodes[face_seg][j][0])**2 + (nodes[face_seg][i][1]-nodes[face_seg][j][1])**2)
+                    if dist < nodes[face_seg][i][2]+nodes[face_seg][j][2]+blank_thres:
+                        # graph.add_node(((nodes[face_seg][i][0]+nodes[face_seg][j][0])/2,(nodes[face_seg][i][1]+nodes[face_seg][j][1])/2))
+                        # graph.add_edge((nodes[face_seg][i][0],nodes[face_seg][i][1]),((nodes[face_seg][i][0]+nodes[face_seg][j][0])/2,(nodes[face_seg][i][1]+nodes[face_seg][j][1])/2))
+                        # graph.add_edge((nodes[face_seg][j][0],nodes[face_seg][j][1]),((nodes[face_seg][i][0]+nodes[face_seg][j][0])/2,(nodes[face_seg][i][1]+nodes[face_seg][j][1])/2))
+                        graph.add_edge((nodes[face_seg][i][0],nodes[face_seg][i][1]),(nodes[face_seg][j][0],nodes[face_seg][j][1]),weight=dist)
+                        image_node = cv2.line(image_node, (nodes[face_seg][i][0],nodes[face_seg][i][1]), (nodes[face_seg][j][0],nodes[face_seg][j][1]), max(nodes[face_seg][i][2],nodes[face_seg][j][2]), 1)
+                    else:
+                        # graph.add_edge((nodes[face_seg][i][0],nodes[face_seg][i][1]),(nodes[face_seg][j][0],nodes[face_seg][j][1]),weight=dist*leave_paper_weight)
+                        pass
 
         ## check isolation
         graph.remove_nodes_from(list(nx.isolates(graph)))
@@ -169,6 +188,7 @@ def travel_pixel_dots(image,resize_ratio=2,max_radias=10,min_radias=2,max_nodes=
             all_paths.append(draw_path)
             count+=1
         print("End tsp...") if SHOW_TSP else None
+        print("tsp time pass",time.time()-tsp_st) if SHOW_TSP else None
         ## if not shrink, then break
         if not shrink_flag:
             break

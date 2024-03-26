@@ -58,9 +58,21 @@ class FaceSegmentation:
         n_classes = seg_probs.size(1)
         vis_seg_probs = seg_probs.argmax(dim=1).float()
         image_mask = np.squeeze(vis_seg_probs.cpu().numpy())
-        ret,image_mask = cv2.threshold(image_mask, 0, 255, cv2.THRESH_BINARY)
+        # ret,image_mask = cv2.threshold(image_mask, 0, 255, cv2.THRESH_BINARY)
         image_mask=image_mask.astype(np.uint8)
         return image_mask
+    def get_face_mask(self,img):
+        image_mask = self.forward_faceonly(img)
+        ret,face_mask = cv2.threshold(image_mask, 0, 255, cv2.THRESH_BINARY)
+        #convert dark pixels to bright pixels
+        # gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        gray_image = img
+        gray_image_masked = cv2.bitwise_and(gray_image, gray_image, mask = face_mask)
+        # get second masked value (background) mask must be inverted
+        background = np.full(gray_image.shape, 255, dtype=np.uint8)
+        bk = cv2.bitwise_and(background, background, mask=cv2.bitwise_not(face_mask))
+        gray_image_masked = cv2.add(gray_image_masked, bk)
+        return gray_image_masked,image_mask,face_mask
 
 def brighten_dark_areas(image, alpha=1.2, beta=100):
     # Apply alpha and beta to the image
@@ -79,19 +91,13 @@ if __name__ == "__main__":
     
     fs = FaceSegmentation()
     start_time=time.time()
-    image_mask = fs.forward_faceonly(img)
-    #convert dark pixels to bright pixels
-    # gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray_image = img
-    gray_image_masked = cv2.bitwise_and(gray_image, gray_image, mask = image_mask)
-    # get second masked value (background) mask must be inverted
-    background = np.full(gray_image.shape, 255, dtype=np.uint8)
-    bk = cv2.bitwise_and(background, background, mask=cv2.bitwise_not(image_mask))
-    gray_image_masked = cv2.add(gray_image_masked, bk)
+    
     print('segmentation time:',time.time()-start_time)
+    gray_image_masked,image_mask,face_mask = fs.get_face_mask(img)
+    plt.imshow(image_mask)
+    plt.show()
     cv2.imshow("img", gray_image_masked)
     cv2.waitKey(0)
-    del fs
     
     #TODO: Identify dark cloth and convert brighter
     #display img
