@@ -20,11 +20,11 @@ USE_RR_ROBOT=False
 if ROBOT_NAME=='ABB_1200_5_90':
     #########################################################config parameters#########################################################
     robot_cam=robot_obj(ROBOT_NAME,'config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/camera.csv')
-    # robot=robot_obj(ROBOT_NAME,'config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
-    robot=robot_obj(ROBOT_NAME,'config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/brush_pen.csv')
+    robot=robot_obj(ROBOT_NAME,'config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
+    # robot=robot_obj(ROBOT_NAME,'config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/brush_pen.csv')
     radius=500 ###eef position to robot base distance w/o z height
     # angle_range=np.array([-3*np.pi/4,-np.pi/4]) ###angle range of joint 1 for robot to move
-    angle_range=np.array([-np.pi/2,0]) ###angle range of joint 1 for robot to move
+    angle_range=np.array([-np.pi/2,-np.pi/4]) ###angle range of joint 1 for robot to move
     height_range=np.array([500,1500]) ###height range for robot to move
     # p_start=np.array([0,-radius,700])	###initial position
     # R_start=np.array([	[0,1,0],
@@ -58,6 +58,12 @@ elif ROBOT_NAME=='ur5':
 else:
     assert False, "ROBOT_NAME is not valid"
 
+## face track joint 1 adjustment
+q_tracking_start[0]=np.mean(angle_range)
+T_tracking_start=robot.fwd(q_tracking_start)
+p_tracking_start=T_tracking_start.p
+R_tracking_start=T_tracking_start.R
+
 RR_ati_cli=None
 if FORCE_FEEDBACK:
     RR_ati_cli=RRN.ConnectService('rr+tcp://localhost:59823?service=ati_sensor') # connect to ATI sensor
@@ -77,9 +83,9 @@ target_size=[1200,800]
 smallest_lam = 20 # smallest path length (unit: mm)
 ######## Controller parameters ###
 controller_params = {
-    "force_ctrl_damping": 60.0, # 180, 90, 60
+    "force_ctrl_damping": 180.0, # 180, 90, 60
     "force_epsilon": 0.1, # Unit: N
-    "moveL_speed_lin": 6.0, # Unit: mm/sec
+    "moveL_speed_lin": 12.0, # Unit: mm/sec
     "moveL_acc_lin": 0.6, # Unit: mm/sec^2
     "moveL_speed_ang": np.radians(10), # Unit: rad/sec
     "trapzoid_slope": 1, # trapzoidal load profile. Unit: N/sec
@@ -87,7 +93,8 @@ controller_params = {
     "unload_speed": 1.0, # Unit mm/sec
     'settling_time': 1, # Unit: sec
     "lookahead_time": 0.132, # Unit: sec
-    "jogging_speed": 50 # Unit: mm/sec
+    "jogging_speed": 100, # Unit: mm/sec
+    "jogging_acc": 25 # Unit: mm/sec^2
     }
 ### Define the motion controller
 mctrl=MotionController(robot,ipad_pose,H_pentip2ati,controller_params,TIMESTEP,USE_RR_ROBOT=USE_RR_ROBOT,
@@ -109,11 +116,13 @@ anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
 # print(robot.fwd(mctrl.read_position()))
 # exit()
 
+q_init = mctrl.read_position()
 #########################################################EXECUTION#########################################################
 while True:
     start_time=time.time()
     #jog to initial_position
     mctrl.jog_joint_position_cmd(q_tracking_start,v=controller_params['jogging_speed'],wait_time=0.5)
+    # mctrl.trajectory_position_cmd([q_init,q_tracking_start],v=controller_params['jogging_speed'])
 
     ###################### Face tracking ######################
     print("FACE TRACKING")
@@ -215,7 +224,7 @@ while True:
     ###Pixel Traversal
     print('TRAVERSING PIXELS')
     face_drawing_order=[10,1,6,7,8,9,2,3,4,5,0]
-    resize_ratio=np.max(np.divide(target_size,anime_img.shape[:2]))
+    resize_ratio=np.mean(np.divide(target_size,anime_img.shape[:2]))
     pixel_paths, image_thresh = travel_pixel_dots(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=image_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
     print("Image size: ", image_thresh.shape)
     ###Project to IPAD
