@@ -14,13 +14,14 @@ sys.path.append('robot_motion')
 from RobotMotionController import *
 
 ROBOT_NAME='ABB_1200_5_90' # ABB_1200_5_90 or ur5
-FORCE_FEEDBACK=False
+FORCE_FEEDBACK=True
 USE_RR_ROBOT=False
 
 if ROBOT_NAME=='ABB_1200_5_90':
     #########################################################config parameters#########################################################
     robot_cam=robot_obj(ROBOT_NAME,'config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/camera.csv')
-    robot=robot_obj(ROBOT_NAME,'config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
+    # robot=robot_obj(ROBOT_NAME,'config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
+    robot=robot_obj(ROBOT_NAME,'config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/brush_pen.csv')
     radius=500 ###eef position to robot base distance w/o z height
     # angle_range=np.array([-3*np.pi/4,-np.pi/4]) ###angle range of joint 1 for robot to move
     angle_range=np.array([-np.pi/2,0]) ###angle range of joint 1 for robot to move
@@ -66,7 +67,8 @@ pixel2mm=np.loadtxt('config/pixel2mm.csv',delimiter=',') # pixel to mm ratio
 pixel2force=np.loadtxt('config/pixel2force.csv',delimiter=',') # pixel to force ratio
 ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',') # ipad pose
 H_pentip2ati=np.loadtxt('config/pentip2ati.csv',delimiter=',') # FT sensor info
-p_button=[] # button position
+p_button=np.array([131, -92, 0]) # button position
+R_pencil=ipad_pose[:3,:3]@Ry(np.pi) # pencil orientation
 hover_height=20 # height to hover above the paper
 face_track_speed=0.8 # speed to track face
 face_track_x = np.array([-np.sin(np.arctan2(p_tracking_start[1],p_tracking_start[0])),np.cos(np.arctan2(p_tracking_start[1],p_tracking_start[0])),0])
@@ -77,14 +79,14 @@ controller_params = {
     "force_ctrl_damping": 60.0, # 180, 90, 60
     "force_epsilon": 0.1, # Unit: N
     "moveL_speed_lin": 6.0, # Unit: mm/sec
-    "moveL_acc_lin": 1.0, # Unit: mm/sec^2
+    "moveL_acc_lin": 0.6, # Unit: mm/sec^2
     "moveL_speed_ang": np.radians(10), # Unit: rad/sec
     "trapzoid_slope": 1, # trapzoidal load profile. Unit: N/sec
     "load_speed": 10.0, # Unit mm/sec
     "unload_speed": 1.0, # Unit mm/sec
     'settling_time': 1, # Unit: sec
     "lookahead_time": 0.132, # Unit: sec
-    "jogging_speed": 10 # Unit: mm/sec
+    "jogging_speed": 50 # Unit: mm/sec
     }
 ### Define the motion controller
 mctrl=MotionController(robot,ipad_pose,H_pentip2ati,controller_params,TIMESTEP,USE_RR_ROBOT=USE_RR_ROBOT,
@@ -183,11 +185,16 @@ while True:
         #get the image within the bounding box, a bit larger than the bbox
         img=img[int(bbox[1]-size[1]/5):int(bbox[3]+size[1]/9),int(bbox[0]-size[0]/9):int(bbox[2]+size[0]/9),:]
 
+    
     print('IMAGE TAKEN')
     cv2.imwrite('img.jpg',img)
 
-    cv2.imshow('img',img)
-    cv2.waitKey(0)
+    print("PAGE FLIPPING")
+    mctrl.press_button_routine(p_button,R_pencil,h_offset=hover_height,lin_vel=controller_params['jogging_speed'], q_seed=q_seed)
+
+    img_st = time.time()
+    # cv2.imshow('img',img)
+    # cv2.waitKey(0)
     ############################################################
 
     ########################## portrait FaceSegmentation/GAN ##############################
@@ -204,50 +211,59 @@ while True:
     img_gray=cv2.cvtColor(anime_img, cv2.COLOR_BGR2GRAY)
     cv2.imwrite('img_out.jpg',anime_img)
 
-    cv2.imshow('img',anime_img)
-    cv2.waitKey(0)
+    # cv2.imshow('img',anime_img)
+    # cv2.waitKey(0)
+    print("IMAGE PROCESSING TIME: ", time.time()-img_st)
     ####################################################################
     
     ####################################PLANNING#####################################################
+    planning_st = time.time()
     ###Pixel Traversal
     print('TRAVERSING PIXELS')
-    pixel_paths, image_thresh = travel_pixel_dots(anime_img,resize_ratio=2,max_radias=10,min_radias=2)
+    pixel_paths, image_thresh = travel_pixel_dots(anime_img,resize_ratio=4,max_radias=10,min_radias=2,SHOW_TSP=True)
+    print("Image size: ", image_thresh.shape)
     ###Project to IPAD
     print("PROJECTING TO IPAD")
     _,cartesian_paths_world,force_paths=image2plane(image_thresh,ipad_pose,pixel2mm,pixel_paths,pixel2force)
 
     ###Solve Joint Trajectory
     print("SOLVING JOINT TRAJECTORY")
-    R_pencil=ipad_pose[:3,:3]@Ry(np.pi)
     js_paths=[]
     for cartesian_path in cartesian_paths_world:
         curve_js=robot.find_curve_js(cartesian_path,[R_pencil]*len(cartesian_path),q_seed)
         js_paths.append(curve_js)
+    print("PLANNING TIME: ", time.time()-planning_st)
 
-    print("PAGE FLIPPING")
-    mctrl.press_button_routine(p_button,R_pencil,h_offset=hover_height,lin_vel=controller_params['jogging_speed'], q_seed=q_seed)
+    ####################################EXECUTION#####################################################
+    execution_st = time.time()
+    
 
     print('START DRAWING')
     num_segments = len(js_paths)
+    print("NUM SEGMENTS: ", num_segments)
     ###Execute
     for i in range(0,num_segments):
-        if len(curve_js)<=1:
+        if len(js_paths[i])<=1:
             continue
         cartesian_path_world = cartesian_paths_world[i]
         force_path = force_paths[i]
         curve_xyz = np.dot(mctrl.ipad_pose_inv[:3,:3],cartesian_path_world.T).T+np.tile(mctrl.ipad_pose_inv[:3,-1],(len(cartesian_path_world),1))
         curve_xy = curve_xyz[:,:2] # get xy curve
         fz_des = force_path*(-1) # transform to tip desired
-        lam = calc_lam_js(curve_js,mctrl.robot) # get path length
+        lam = calc_lam_js(js_paths[i],mctrl.robot) # get path length
         if lam[-1] < smallest_lam:
             continue
-        traj_q, traj_xy, traj_fz, time_bp = mctrl.trajectory_generate(curve_js,curve_xy,fz_des) # get trajectory and time_bp
+        traj_q, traj_xy, traj_fz, time_bp = mctrl.trajectory_generate(js_paths[i],curve_xy,fz_des) # get trajectory and time_bp
         #### motion start ###
-        mctrl.motion_start_procedure(traj_q[0],traj_fz[0],hover_height,1,lin_vel=controller_params['jogging_speed'])
+        mctrl.motion_start_routine(traj_q[0],traj_fz[0],hover_height,2,lin_vel=controller_params['jogging_speed'])
         joint_force_exe, cart_force_exe = mctrl.trajectory_force_PIDcontrol(traj_xy,traj_q,traj_fz,force_lookahead=True)
-        mctrl.motion_end_procedure(traj_q[-1],hover_height, lin_vel=controller_params['jogging_speed'])
+        mctrl.motion_end_routine(traj_q[-1],hover_height, lin_vel=controller_params['jogging_speed'])
 
     #jog to end point
-    mctrl.motion_end_procedure(traj_q[-1],hover_height*4, lin_vel=controller_params['jogging_speed'])
+    mctrl.motion_end_routine(traj_q[-1],hover_height*4, lin_vel=controller_params['jogging_speed'])
 
     print('FINISHED DRAWING')
+
+    print("EXECUTION TIME: ", time.time()-execution_st)
+    ####################################################################
+    print('TOTAL TIME: ', time.time()-img_st)

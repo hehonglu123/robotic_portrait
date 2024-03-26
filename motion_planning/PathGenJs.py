@@ -10,8 +10,8 @@ from robot_def import *
 def main():
     # img_name='wen_out'
     # img_name='strokes_out'
-    # img_name='wen_name_out'
-    img_name='me_out'
+    img_name='wen_name_out'
+    # img_name='me_out'
     # img_name='new_year_out'
     # img_name='ilc_path1'
     image=cv2.imread(CODE_PATH+'imgs/'+img_name+'.png')
@@ -20,7 +20,8 @@ def main():
     ipad_pose=np.loadtxt(CODE_PATH+'config/ipad_pose.csv',delimiter=',')
 
 
-    robot=robot_obj('ABB_1200_5_90',CODE_PATH+'config/ABB_1200_5_90_robot_default_config.yml',tool_file_path=CODE_PATH+'config/heh6_pen.csv')
+    # robot=robot_obj('ABB_1200_5_90',CODE_PATH+'config/ABB_1200_5_90_robot_default_config.yml',tool_file_path=CODE_PATH+'config/heh6_pen.csv')
+    robot=robot_obj('ABB_1200_5_90',CODE_PATH+'config/ABB_1200_5_90_robot_default_config.yml',tool_file_path=CODE_PATH+'config/brush_M_pen.csv')
 
     # robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/heh6_pen_ur.csv')
 

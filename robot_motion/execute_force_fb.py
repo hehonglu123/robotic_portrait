@@ -14,7 +14,7 @@ from lambda_calc import *
 from motion_toolbox import *
 
 FORCE_PROTECTION = 2.5  # Force protection. Units: N
-SHOW_STATUS = True
+SHOW_STATUS = False
 
 USE_RR_ROBOT = False
 
@@ -180,7 +180,6 @@ class MotionController(object):
 
         # transform to tip desired
         fz_des = fz_des*(-1)
-        print("fz_des: ",fz_des)
         # check if fz_des is a number or list
         if isinstance(fz_des,(int,float)):
             fz_des = np.ones(len(q_all))*fz_des
@@ -263,11 +262,7 @@ class MotionController(object):
             fz_des_lookahead = frac_lookahead*fz_des[seg_lookahead]+(1-frac_lookahead)*fz_des[seg_lookahead-1]
             # f_err = fz_des_now-fz_now # feedback error
             f_err = fz_des_lookahead-fz_now # feedback error lookahead
-            print(fz_des_lookahead)
-            print(fz_now)
             v_des_z = self.force_impedence_ctrl(f_err) # force control
-            print(v_des_z)
-            print("====================")
             if np.linalg.norm(ft_tip[3:])>FORCE_PROTECTION: # force protection break
                 print("force: ",ft_tip[3:])
                 print("force too large")
@@ -333,8 +328,8 @@ def main():
     # img_name='wen_out'
     # img_name='strokes_out'
     # img_name='strokes_out_3'
-    # img_name='wen_name_out'
-    img_name='me_out'
+    img_name='wen_name_out'
+    # img_name='me_out'
     # img_name='new_year_out'
 
     visualize=False
@@ -344,7 +339,8 @@ def main():
 
     ipad_pose=np.loadtxt('../config/ipad_pose.csv',delimiter=',')
     num_segments=len(glob.glob('../path/cartesian_path/'+img_name+'/*.csv'))
-    robot=robot_obj('ABB_1200_5_90','../config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='../config/heh6_pen.csv')
+    # robot=robot_obj('ABB_1200_5_90','../config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='../config/heh6_pen.csv')
+    robot=robot_obj('ABB_1200_5_90','../config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='../config/brush_M_pen.csv')
     # robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/heh6_pen_ur.csv')
     # print(robot.fwd(np.array([0,0,0,0,0,0])))
     # exit()
@@ -354,16 +350,16 @@ def main():
  
     ######## Controller parameters ###
     controller_params = {
-        "force_ctrl_damping": 60, # 180.0,
+        "force_ctrl_damping": 180, # 60, 180.0,
         "force_epsilon": 0.1, # Unit: N
-        "moveL_speed_lin": 3.0, # Unit: mm/sec
+        "moveL_speed_lin": 6.0, # Unit: mm/sec
         "moveL_acc_lin": 1.0, # Unit: mm/sec^2
         "moveL_speed_ang": np.radians(10), # Unit: rad/sec
         "trapzoid_slope": 1, # trapzoidal load profile. Unit: N/sec
         "load_speed": 10.0, # Unit mm/sec
         "unload_speed": 1.0, # Unit mm/sec
         'settling_time': 1, # Unit: sec
-        "lookahead_time": 0.1 # Unit: sec
+        "lookahead_time": 0.132 # Unit: sec
         }
     
     ######## Motion Controller ###
@@ -396,6 +392,7 @@ def main():
                 p_start=pose_start.p+h_offset_low*ipad_pose[:3,-2]
                 q_start=robot.inv(p_start,pose_start.R,curve_js[0])[0]
                 mctrl.jog_joint_position_cmd(q_start,wait_time=0.5)
+                time.sleep(1)
                 # set tare before load force
                 mctrl.RR_ati_cli.setf_param("set_tare", RR.VarValue(True, "bool"))
                 if SHOW_STATUS:

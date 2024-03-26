@@ -141,8 +141,8 @@ for corner in corners:
 		fz_now = float(ft_tip[-1])
 		ft_tip_norm = np.linalg.norm(ft_tip[3:])
 		print(fz_now,ft_tip_norm)
-		# f_cur = fz_now*-1
-		f_cur = ft_tip_norm
+		f_cur = fz_now*-1
+		# f_cur = ft_tip_norm
 		print(ft_reading,f_cur)
 		time.sleep(0.004)
 	

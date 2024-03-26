@@ -39,6 +39,7 @@ class MotionController(object):
         self.ipad_pose=ipad_pose
         self.ipad_pose_inv = np.linalg.inv(self.ipad_pose)
         self.ipad_pose_T = Transform(self.ipad_pose[:3,:3],self.ipad_pose[:3,-1])
+        self.ipad_pose_inv_T = self.ipad_pose_T.inv()
         self.H_pentip2ati=H_pentip2ati
         self.H_ati2pentip=np.linalg.inv(H_pentip2ati)
         self.ad_ati2pentip=adjoint_map(Transform(self.H_ati2pentip[:3,:3],self.H_ati2pentip[:3,-1]))
@@ -77,6 +78,12 @@ class MotionController(object):
             self.egm = EGM()
   
         self.TIMESTEP = TIMESTEP # egm timestep 4 ms, ur5 10 ms
+        self.params['lookahead_index'] = int(self.params['lookahead_time']/self.TIMESTEP)
+
+        self.ft_reading = None
+        while self.ft_reading is None:
+            time.sleep(0.1)
+        print("Motion controller initialized")
         
     def connect_position_mode(self):
      
@@ -115,9 +122,10 @@ class MotionController(object):
         for i in range(read_N):
             self.read_position()
     
-    def wrench_wire_cb(self,w,value,time):
+    def wrench_wire_cb(self,w,value,t):
 
         self.ft_reading = np.array([value['torque']['x'],value['torque']['y'],value['torque']['z'],value['force']['x'],value['force']['y'],value['force']['z']])
+        self.last_ft_time = time.time()
 
     def force_impedence_ctrl(self,f_err):
      
@@ -144,6 +152,9 @@ class MotionController(object):
             if np.linalg.norm(ft_tip[3:])>self.FORCE_PROTECTION:
                 print("force: ",ft_tip[3:])
                 print("force too large")
+                break
+            if time.time()-self.last_ft_time>0.1:
+                print("force reading lost")
                 break
             # time force joint angle record
             ft_record.append(np.append(np.array([time.time(),fz_now]),np.degrees(q_now)))
@@ -218,13 +229,15 @@ class MotionController(object):
     def press_button_routine(self, p_button, R_button, h_offset=30, lin_vel=2, press_force=1, q_seed=None):
         
         if q_seed is None:
-            q_seed=self.read_position()
+            q_seed=self.read_position() 
         # jog to button point
-        T_button_offset_robot=self.ipad_pose_T*Transform(p_button+np.array([0,0,h_offset]),R_button)
-        T_button_robot=self.ipad_pose_T*Transform(p_button,R_button)
+        T_button_offset_robot=self.ipad_pose_T*Transform(R_button,p_button+np.array([0,0,h_offset]))
+        T_button_robot=self.ipad_pose_T*Transform(R_button,p_button+np.array([0,0,1]))
         q_button_offset=self.robot.inv(T_button_offset_robot.p,T_button_offset_robot.R,q_seed)[0]
         q_button=self.robot.inv(T_button_robot.p,T_button_robot.R,q_seed)[0]
         self.jog_joint_position_cmd(q_button_offset,v=lin_vel) # move about the button
+        self.jog_joint_position_cmd(q_button,v=lin_vel) # move about the button
+        self.RR_ati_cli.setf_param("set_tare", RR.VarValue(True, "bool"))
         self.force_load_z(-press_force,load_speed=lin_vel) # press the button
         self.jog_joint_position_cmd(q_button_offset,v=lin_vel) # move about the button
     
@@ -325,7 +338,9 @@ class MotionController(object):
                 print("force: ",ft_tip[3:])
                 print("force too large")
                 break
-            
+            if time.time()-self.last_ft_time>0.1: # force reading lost break
+                print("force reading lost")
+                break
             ### force feedback control
             # get current desired force
             if force_lookahead:
