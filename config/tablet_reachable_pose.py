@@ -78,7 +78,6 @@ j5_lower = 0
 j_svd = 0.05
 
 ## run through all possible poses of the paper
-fig,axs = plt.subplots(2,3)
 plt_cnt = 0
 
 feasible_xz_all = []
@@ -125,16 +124,26 @@ xmin=np.min([np.min(feasible_xz[:,0]) for feasible_xz in feasible_xz_all])-100
 xmax=np.max([np.max(feasible_xz[:,0]) for feasible_xz in feasible_xz_all])+100
 zmin=np.min([np.min(feasible_xz[:,1]) for feasible_xz in feasible_xz_all])-100
 zmax=np.max([np.max(feasible_xz[:,1]) for feasible_xz in feasible_xz_all])+100
+
+suptitle_fontsize=24
+title_fontsize=16
+xylabel_fontsize=14
+fig,axs = plt.subplots(2,3)
 for feasible_xz,smallest_svd,angle in zip(feasible_xz_all,smallest_svd_all,np.linspace(angle_lower,angle_upper,5)):
     feasible_xz = np.array(feasible_xz)
     smallest_svd = np.array(smallest_svd)
     sc = axs[int(plt_cnt/3),int(plt_cnt%3)].scatter(feasible_xz[:,0],feasible_xz[:,1],c=smallest_svd,cmap='coolwarm', vmin=vmin, vmax=vmax)
     axs[int(plt_cnt/3),int(plt_cnt%3)].set_xlim(xmin,xmax)
     axs[int(plt_cnt/3),int(plt_cnt%3)].set_ylim(zmin,zmax)
-    axs[int(plt_cnt/3),int(plt_cnt%3)].set_title("Rotated Angle: "+str(np.fabs(np.degrees(angle))))
-    axs[int(plt_cnt/3),int(plt_cnt%3)].set_xlabel("x - w.r.t the robot base (mm)")
-    axs[int(plt_cnt/3),int(plt_cnt%3)].set_ylabel("z - w.r.t the robot base (mm)")
+    axs[int(plt_cnt/3),int(plt_cnt%3)].set_title("Rotated Angle: "+str(np.fabs(np.round(np.degrees(angle))).astype(int)),fontsize=title_fontsize)
+    axs[int(plt_cnt/3),int(plt_cnt%3)].set_xlabel("x - w.r.t the robot base (mm)",fontsize=xylabel_fontsize)
+    axs[int(plt_cnt/3),int(plt_cnt%3)].set_ylabel("z - w.r.t the robot base (mm)",fontsize=xylabel_fontsize)
+    axs[int(plt_cnt/3),int(plt_cnt%3)].grid()
+    axs[int(plt_cnt/3),int(plt_cnt%3)].set_xticks(np.arange(xmin,xmax+1,100))
+    axs[int(plt_cnt/3),int(plt_cnt%3)].set_yticks(np.arange(zmin,zmax+1,100))
+    axs[int(plt_cnt/3),int(plt_cnt%3)].set_xticklabels(np.round(axs[int(plt_cnt/3),int(plt_cnt%3)].get_xticks()).astype(int),fontsize=xylabel_fontsize)
+    axs[int(plt_cnt/3),int(plt_cnt%3)].set_yticklabels(np.round(axs[int(plt_cnt/3),int(plt_cnt%3)].get_yticks()).astype(int),fontsize=xylabel_fontsize)
     plt_cnt+=1
 fig.colorbar(sc, ax=axs, orientation='vertical', fraction=0.02, pad=0.04)
-plt.title("Tablet Reachable Pose")
+fig.suptitle("Tablet Reachable Pose (Color: Smallest Singular Value of Jacobian)",fontsize=suptitle_fontsize)
 plt.show()
