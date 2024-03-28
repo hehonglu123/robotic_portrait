@@ -63,19 +63,26 @@ paper_dim_low = np.array([-paper_size[0]/2,-paper_size[1]/2,paper_h_lower])
 paper_dim_high = np.array([paper_size[0]/2,paper_size[1]/2,paper_h_upper])
 
 box_points = []
-disc_N=3
+disc_N=5
 for x in np.linspace(paper_dim_low[0],paper_dim_high[0],disc_N):
     for y in np.linspace(paper_dim_low[1],paper_dim_high[1],disc_N):
         for z in np.linspace(paper_dim_low[2],paper_dim_high[2],disc_N):
             box_points.append(np.array([x,y,z]))
 
 ### feasible conditions
+j1_lower = -np.pi/2
+j1_upper = np.pi/2
+j2_upper = np.pi/2
+j3_lower = -np.pi/2
 j5_lower = 0
 j_svd = 0.05
 
 ## run through all possible poses of the paper
 fig,axs = plt.subplots(2,3)
 plt_cnt = 0
+
+feasible_xz_all = []
+smallest_svd_all = []
 for angle in np.linspace(angle_lower,angle_upper,5):
     print("angle:",np.degrees(angle))
     feasible_xz = []
@@ -94,7 +101,7 @@ for angle in np.linspace(angle_lower,angle_upper,5):
                 except:
                     non_feasible = True
                     break
-                if q[4]<j5_lower:
+                if q[0]<j1_lower or q[0]>j1_upper or q[1]>j2_upper or q[2]<j3_lower or q[4]<j5_lower:
                     non_feasible = True
                     break
                 u,s,v=np.linalg.svd(robot.jacobian(q))
@@ -107,10 +114,27 @@ for angle in np.linspace(angle_lower,angle_upper,5):
                 continue
             feasible_xz.append([x,z])
             smallest_svd.append(np.mean(smallest_svd_collect))
-    plt_cnt+=1
+    feasible_xz=np.array(feasible_xz)
+    smallest_svd=np.array(smallest_svd)
+    feasible_xz_all.append(feasible_xz)
+    smallest_svd_all.append(smallest_svd)
+
+vmin=np.min([np.min(smallest_svd) for smallest_svd in smallest_svd_all])
+vmax=np.max([np.max(smallest_svd) for smallest_svd in smallest_svd_all])
+xmin=np.min([np.min(feasible_xz[:,0]) for feasible_xz in feasible_xz_all])-100
+xmax=np.max([np.max(feasible_xz[:,0]) for feasible_xz in feasible_xz_all])+100
+zmin=np.min([np.min(feasible_xz[:,1]) for feasible_xz in feasible_xz_all])-100
+zmax=np.max([np.max(feasible_xz[:,1]) for feasible_xz in feasible_xz_all])+100
+for feasible_xz,smallest_svd,angle in zip(feasible_xz_all,smallest_svd_all,np.linspace(angle_lower,angle_upper,5)):
     feasible_xz = np.array(feasible_xz)
     smallest_svd = np.array(smallest_svd)
-    axs[int(plt_cnt/3),int(plt_cnt%3)].scatter(feasible_xz[:,0],feasible_xz[:,1],c=smallest_svd,cmap='coolwarm')
-    axs[int(plt_cnt/3),int(plt_cnt%3)].set_xlim(0,1200)
-    axs[int(plt_cnt/3),int(plt_cnt%3)].set_ylim(0,1000)
+    sc = axs[int(plt_cnt/3),int(plt_cnt%3)].scatter(feasible_xz[:,0],feasible_xz[:,1],c=smallest_svd,cmap='coolwarm', vmin=vmin, vmax=vmax)
+    axs[int(plt_cnt/3),int(plt_cnt%3)].set_xlim(xmin,xmax)
+    axs[int(plt_cnt/3),int(plt_cnt%3)].set_ylim(zmin,zmax)
+    axs[int(plt_cnt/3),int(plt_cnt%3)].set_title("Rotated Angle: "+str(np.fabs(np.degrees(angle))))
+    axs[int(plt_cnt/3),int(plt_cnt%3)].set_xlabel("x - w.r.t the robot base (mm)")
+    axs[int(plt_cnt/3),int(plt_cnt%3)].set_ylabel("z - w.r.t the robot base (mm)")
+    plt_cnt+=1
+fig.colorbar(sc, ax=axs, orientation='vertical', fraction=0.02, pad=0.04)
+plt.title("Tablet Reachable Pose")
 plt.show()
