@@ -16,15 +16,20 @@ class AnimeGANv3:
     def __init__(self, model_path):
         self.ort_session = onnxruntime.InferenceSession(model_path)
 
-    def process_image(self, img, x32=True):
+    def resize_image_x32(self, img):
+        
+        def to_32s(x):
+                return 256 if x < 256 else x - x%32
         h, w = img.shape[:2]
         ratio = h/w
+        new_h = to_32s(h)
+        new_w = int(new_h/ratio) - int(new_h/ratio)%32
+        img = cv2.resize(img, (new_w, new_h))
+        return img
+
+    def process_image(self, img, x32=True):
         if x32: # resize image to multiple of 32s
-            def to_32s(x):
-                return 256 if x < 256 else x - x%32
-            new_h = to_32s(h)
-            new_w = int(new_h/ratio) - int(new_h/ratio)%32
-            img = cv2.resize(img, (new_w, new_h))
+            img = self.resize_image_x32(img)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32)/ 127.5 - 1.0
         return img
 
@@ -60,9 +65,9 @@ class FaceSegmentation:
         image_mask = np.squeeze(vis_seg_probs.cpu().numpy())
         # ret,image_mask = cv2.threshold(image_mask, 0, 255, cv2.THRESH_BINARY)
         image_mask=image_mask.astype(np.uint8)
-        return image_mask
+        return image_mask,faces
     def get_face_mask(self,img):
-        image_mask = self.forward_faceonly(img)
+        image_mask,faces = self.forward_faceonly(img)
         ret,face_mask = cv2.threshold(image_mask, 0, 255, cv2.THRESH_BINARY)
         #convert dark pixels to bright pixels
         # gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -72,7 +77,7 @@ class FaceSegmentation:
         background = np.full(gray_image.shape, 255, dtype=np.uint8)
         bk = cv2.bitwise_and(background, background, mask=cv2.bitwise_not(face_mask))
         gray_image_masked = cv2.add(gray_image_masked, bk)
-        return gray_image_masked,image_mask,face_mask
+        return gray_image_masked,image_mask,face_mask,faces
 
 def brighten_dark_areas(image, alpha=1.2, beta=100):
     # Apply alpha and beta to the image
