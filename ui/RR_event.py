@@ -24,7 +24,7 @@ class create_impl(object):
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-credential_directory = "../../google_credentials/"
+credential_directory = "credentials/"
 
 def main():
     with RR.ServerNodeSetup("experimental.minimal_create", 52222):
@@ -35,7 +35,10 @@ def main():
         
         #Register the service
         RRN.RegisterService("Create","experimental.minimal_create.create_obj",create_inst)
-        creds = Credentials.from_authorized_user_file(credential_directory+"token.json", SCOPES)
+        try:
+            creds = Credentials.from_authorized_user_file(credential_directory+"token.json", SCOPES)
+        except:
+            creds = None
         # If there are no (valid) credentials available, let the user log in.
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
