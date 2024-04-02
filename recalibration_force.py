@@ -116,7 +116,13 @@ corners_adjusted=[]
 f_d=1	#10N push down
 for corner in corners:
 	corner_top=corner+10*ipad_pose[:3,-2]
+	corner_top_safe=corner+50*ipad_pose[:3,-2]
+	print(corner_top)
+	print(corner_top_safe)
+	input("Move to corner")
 	q_corner_top=robot.inv(corner_top,R_pencil,q_seed)[0]	###initial joint position
+	q_corner_top_safe=robot.inv(corner_top_safe,R_pencil,q_seed)[0]
+	jog_joint_position_cmd(q_corner_top_safe,v=0.2,wait_time=0.1)
 	jog_joint_position_cmd(q_corner_top,v=0.2,wait_time=0.5)
 
 	time.sleep(0.5)
@@ -148,7 +154,7 @@ for corner in corners:
 	
 	corners_adjusted.append(robot.fwd(q_cur).p)
 
-	jog_joint_position_cmd(q_corner_top,v=0.2)
+	jog_joint_position_cmd(q_corner_top_safe,v=0.2)
 
 
 ###UPDATE IPAD POSE based on new corners

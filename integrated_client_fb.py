@@ -25,7 +25,7 @@ if ROBOT_NAME=='ABB_1200_5_90':
     radius=500 ###eef position to robot base distance w/o z height
     # angle_range=np.array([-3*np.pi/4,-np.pi/4]) ###angle range of joint 1 for robot to move
     angle_range=np.array([-np.pi/2,np.pi/2]) ###angle range of joint 1 for robot to move
-    height_range=np.array([500,1500]) ###height range for robot to move
+    height_range=np.array([600,1500]) ###height range for robot to move
     # p_start=np.array([0,-radius,700])	###initial position
     # R_start=np.array([	[0,1,0],
     #                     [0,0,-1],
@@ -74,7 +74,8 @@ pixel2force=np.loadtxt('config/pixel2force.csv',delimiter=',') # pixel to force 
 ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',') # ipad pose
 H_pentip2ati=np.loadtxt('config/pentip2ati.csv',delimiter=',') # FT sensor info
 p_button=np.array([131, -92, 0]) # button position, in ipad frame
-R_pencil=ipad_pose[:3,:3]@Ry(np.pi) # pencil orientation, world frame
+R_pencil=Ry(np.pi) # pencil orientation, ipad frame
+R_pencil_base=ipad_pose[:3,:3]@R_pencil # pencil orientation, world frame
 hover_height=20 # height to hover above the paper
 face_track_speed=0.8 # speed to track face
 face_track_x = np.array([-np.sin(np.arctan2(p_tracking_start[1],p_tracking_start[0])),np.cos(np.arctan2(p_tracking_start[1],p_tracking_start[0])),0])
@@ -83,18 +84,19 @@ target_size=[1200,800]
 smallest_lam = 20 # smallest path length (unit: mm)
 ######## Controller parameters ###
 controller_params = {
-    "force_ctrl_damping": 180.0, # 180, 90, 60
+    "force_ctrl_damping": 200.0, # 180, 90, 60
     "force_epsilon": 0.1, # Unit: N
-    "moveL_speed_lin": 12.0, # Unit: mm/sec
+    "moveL_speed_lin": 10.0, # Unit: mm/sec
     "moveL_acc_lin": 0.6, # Unit: mm/sec^2
     "moveL_speed_ang": np.radians(10), # Unit: rad/sec
     "trapzoid_slope": 1, # trapzoidal load profile. Unit: N/sec
     "load_speed": 10.0, # Unit mm/sec
     "unload_speed": 1.0, # Unit mm/sec
     'settling_time': 1, # Unit: sec
-    "lookahead_time": 0.132, # Unit: sec
+    "lookahead_time": 0.02, # Unit: sec
     "jogging_speed": 100, # Unit: mm/sec
-    "jogging_acc": 25 # Unit: mm/sec^2
+    "jogging_acc": 25, # Unit: mm/sec^2
+    'force_filter_alpha': 0.9 # force low pass filter alpha
     }
 ### Define the motion controller
 mctrl=MotionController(robot,ipad_pose,H_pentip2ati,controller_params,TIMESTEP,USE_RR_ROBOT=USE_RR_ROBOT,
@@ -124,80 +126,87 @@ while True:
     mctrl.jog_joint_position_cmd(q_tracking_start,v=controller_params['jogging_speed'],wait_time=0.5)
     # mctrl.trajectory_position_cmd([q_init,q_tracking_start],v=controller_params['jogging_speed'])
 
-    ###################### Face tracking ######################
-    print("FACE TRACKING")
-    q_cmd_prev=q_tracking_start
-    while True:
-        loop_start_time=time.time()
-        wire_packet=bbox_wire.TryGetInValue()
-        
-        
-        q_cur=mctrl.read_position()
-        pose_cur=robot_cam.fwd(q_cur)
-        if mctrl.USE_RR_ROBOT:
-            time.sleep(mctrl.TIMESTEP)
-        
-        if wire_packet[0]:
-            bbox=wire_packet[1]
-            if len(bbox)==0 or (q_cur[0]<angle_range[0] or q_cur[0]>angle_range[1] or pose_cur.p[2]<height_range[0] or pose_cur.p[2]>height_range[1]):
-                 # if no face detected, or out of range
-                 # jog to initial position
-                diff=q_tracking_start-q_cur
-                if np.linalg.norm(diff)>face_track_speed/2:
-                    qdot=diff/np.linalg.norm(diff)
-                else:
-                    qdot=diff
-            else:	#if face detected
-                #calculate size of bbox
-                size=np.array([bbox[2]-bbox[0],bbox[3]-bbox[1]])
-                #calculate center of bbox
-                center=np.array([bbox[0]+size[0]/2,bbox[1]+size[1]/2])
-                y_gain=-1 # -0.8
-                x_gain=-0.001 # -0.08
-                yd=center[1]-image_center[1]
-                xd=center[0]-image_center[0]
-                try:
-                    q_temp=robot_cam.inv(pose_cur.p+yd*np.array([0,0,y_gain]),pose_cur.R,q_cur)[0]
-                except:
-                    continue
-                q_temp+=xd*np.array([x_gain,0,0,0,0,0])
-                q_diff=q_temp-q_cur
-                if np.linalg.norm(q_diff)>face_track_speed:
-                    qdot=face_track_speed*q_diff/np.linalg.norm(q_diff)
-                else:
-                    qdot=q_diff
-                # vdot = (x_gain*xd*face_track_x + y_gain*yd*face_track_y)
-                # vdot = y_gain*yd*face_track_y
-                
-                # if np.linalg.norm(vdot)>face_track_speed:
-                #     vdot=face_track_speed*vdot/np.linalg.norm(vdot)
-                # J_mat = robot.jacobian(q_cur)
-                # qdot = np.linalg.pinv(J_mat)@np.append(np.zeros(3),vdot)
-                # qdot = qdot + np.array([xd*x_gain,0,0,0,0,0])
-                
-                if np.linalg.norm(qdot)<0.1:
-                    # print(time.time()-start_time)
-                    if time.time()-start_time>1000:
-                        break
-                else:
-                    start_time=time.time()
-            
-            # send position command to robot
-            q_cmd=q_cmd_prev+qdot*mctrl.TIMESTEP
-            mctrl.position_cmd(q_cmd)
-            q_cmd_prev=copy.deepcopy(q_cmd)
+    ## Next round activatoion
+    input("Press Enter to start next round")
 
-    ##### Get face image #####
-    RR_image=image_wire.TryGetInValue()
-    if RR_image[0]:
-        img=RR_image[1]
-        img=np.array(img.data,dtype=np.uint8).reshape((img.image_info.height,img.image_info.width,3))
-        #get the image within the bounding box, a bit larger than the bbox
-        img=img[int(bbox[1]-size[1]/5):int(bbox[3]+size[1]/9),int(bbox[0]-size[0]/9):int(bbox[2]+size[0]/9),:]
+    ###################### Face tracking ######################
+    # print("FACE TRACKING")
+    # q_cmd_prev=q_tracking_start
+    # while True:
+    #     loop_start_time=time.time()
+    #     wire_packet=bbox_wire.TryGetInValue()
+        
+        
+    #     q_cur=mctrl.read_position()
+    #     pose_cur=robot_cam.fwd(q_cur)
+    #     if mctrl.USE_RR_ROBOT:
+    #         time.sleep(mctrl.TIMESTEP)
+        
+    #     if wire_packet[0]:
+    #         bbox=wire_packet[1]
+    #         if len(bbox)==0 or (q_cur[0]<angle_range[0] or q_cur[0]>angle_range[1] or pose_cur.p[2]<height_range[0] or pose_cur.p[2]>height_range[1]):
+    #              # if no face detected, or out of range
+    #              # jog to initial position
+    #             diff=q_tracking_start-q_cur
+    #             if np.linalg.norm(diff)>face_track_speed/2:
+    #                 qdot=diff/np.linalg.norm(diff)
+    #             else:
+    #                 qdot=diff
+    #         else:	#if face detected
+    #             #calculate size of bbox
+    #             size=np.array([bbox[2]-bbox[0],bbox[3]-bbox[1]])
+    #             #calculate center of bbox
+    #             center=np.array([bbox[0]+size[0]/2,bbox[1]+size[1]/2])
+    #             y_gain=-1 # -0.8
+    #             x_gain=-0.001 # -0.08
+    #             yd=center[1]-image_center[1]
+    #             xd=center[0]-image_center[0]
+    #             try:
+    #                 q_temp=robot_cam.inv(pose_cur.p+yd*np.array([0,0,y_gain]),pose_cur.R,q_cur)[0]
+    #             except:
+    #                 continue
+    #             q_temp+=xd*np.array([x_gain,0,0,0,0,0])
+    #             q_diff=q_temp-q_cur
+    #             if np.linalg.norm(q_diff)>face_track_speed:
+    #                 qdot=face_track_speed*q_diff/np.linalg.norm(q_diff)
+    #             else:
+    #                 qdot=q_diff
+    #             # vdot = (x_gain*xd*face_track_x + y_gain*yd*face_track_y)
+    #             # vdot = y_gain*yd*face_track_y
+                
+    #             # if np.linalg.norm(vdot)>face_track_speed:
+    #             #     vdot=face_track_speed*vdot/np.linalg.norm(vdot)
+    #             # J_mat = robot.jacobian(q_cur)
+    #             # qdot = np.linalg.pinv(J_mat)@np.append(np.zeros(3),vdot)
+    #             # qdot = qdot + np.array([xd*x_gain,0,0,0,0,0])
+                
+    #             if np.linalg.norm(qdot)<0.1:
+    #                 # print(time.time()-start_time)
+    #                 if time.time()-start_time>3:
+    #                     break
+    #             else:
+    #                 start_time=time.time()
+            
+    #         # send position command to robot
+    #         q_cmd=q_cmd_prev+qdot*mctrl.TIMESTEP
+    #         mctrl.position_cmd(q_cmd)
+    #         q_cmd_prev=copy.deepcopy(q_cmd)
+
+    # ##### Get face image #####
+    # RR_image=image_wire.TryGetInValue()
+    # if RR_image[0]:
+    #     img=RR_image[1]
+    #     img=np.array(img.data,dtype=np.uint8).reshape((img.image_info.height,img.image_info.width,3))
+    #     #get the image within the bounding box, a bit larger than the bbox
+    #     img=img[int(bbox[1]-size[1]/5):int(bbox[3]+size[1]/9),int(bbox[0]-size[0]/9):int(bbox[2]+size[0]/9),:]
 
     
-    print('IMAGE TAKEN')
-    cv2.imwrite('img.jpg',img)
+    # print('IMAGE TAKEN')
+    # cv2.imwrite('img.jpg',img)
+
+    img = cv2.imread('img.jpg')
+    plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+    plt.show()
 
     print("PAGE FLIPPING")
     mctrl.press_button_routine(p_button,R_pencil,h_offset=hover_height,lin_vel=controller_params['jogging_speed'], q_seed=q_seed)
@@ -235,7 +244,7 @@ while True:
     print("SOLVING JOINT TRAJECTORY")
     js_paths=[]
     for cartesian_path in cartesian_paths_world:
-        curve_js=robot.find_curve_js(cartesian_path,[R_pencil]*len(cartesian_path),q_seed)
+        curve_js=robot.find_curve_js(cartesian_path,[R_pencil_base]*len(cartesian_path),q_seed)
         js_paths.append(curve_js)
     print("PLANNING TIME: ", time.time()-planning_st)
 

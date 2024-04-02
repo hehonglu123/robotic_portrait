@@ -281,6 +281,18 @@ class MotionController(object):
         else:
             time_bp = lam/lin_vel
         
+        # total time stamps
+        time_stamps = np.arange(0,time_bp[-1],self.TIMESTEP)
+        time_stamps = np.append(time_stamps,time_bp[-1])
+
+        polyfit=CubicSpline(time_bp,curve_js, bc_type='natural')
+        traj_q_p = polyfit(time_stamps)
+        polyfit=CubicSpline(time_bp,curve_xy, bc_type='natural')
+        traj_xy_p = polyfit(time_stamps)
+        polyfit=CubicSpline(time_bp,force_path, bc_type='natural')
+        traj_fz_p = polyfit(time_stamps)
+
+
         # Calculate the number of steps for the trajectory
         num_steps = int(time_bp[-1] / self.TIMESTEP)
 
@@ -315,6 +327,22 @@ class MotionController(object):
             traj_xy.append(xy_des)
             traj_fz.append(fz_des)
         
+        
+        # if force_path[0]!=0:
+        #     plt.plot(traj_q[1])
+        #     plt.plot(traj_q_p[1])
+        #     plt.title("Trajectory q")
+        #     plt.show()
+
+        #     plt.plot(traj_fz)
+        #     plt.plot(traj_fz_p)
+        #     plt.title("Trajectory fz")
+        #     plt.show()
+
+        # traj_fz=np.array(traj_fz_p)
+        # traj_q=np.array(traj_q_p)
+        # traj_xy=np.array(traj_xy_p)
+        
         return np.array(traj_q), np.array(traj_xy), np.array(traj_fz), np.array(time_bp)
     
     def trajectory_force_PIDcontrol(self,traj_xy,traj_js,traj_fz,force_lookahead=False):
@@ -326,14 +354,21 @@ class MotionController(object):
         start_time=time.time()
         joint_force_exe=[]
         cart_force_exe=[]
+        force_tracked=None
         for i in range(len(traj_xy)):
             # joint reading
             q_now = self.read_position()
             tip_now = self.robot.fwd(q_now)
             tip_now_ipad = self.ipad_pose_inv_T*tip_now
             # read force
-            ft_tip = self.ad_ati2pentip_T@self.ft_reading
-            fz_now = float(ft_tip[-1])
+            ft_tip = self.ad_ati2pentip_T@np.append(np.zeros(3),self.ft_reading[3:])
+            # fz_now = float(ft_tip[-1])
+            fz_now = float(self.ft_reading[-1])
+            # apply low pass filter
+            if force_tracked is None:
+                force_tracked = fz_now
+            else:
+                force_tracked = force_tracked*(1-self.params['force_filter_alpha'])+fz_now*self.params['force_filter_alpha']
             if np.linalg.norm(ft_tip[3:])>self.FORCE_PROTECTION: # force protection break
                 print("force: ",ft_tip[3:])
                 print("force too large")
@@ -379,7 +414,7 @@ class MotionController(object):
         # print(q_all[-10:])
         # exit()
         # q_all = np.vstack((q_start,q))
-        traj_q, traj_xy, traj_fz, time_bp=self.trajectory_generate(q_all,np.zeros_like(q_all),np.zeros_like(q_all),lin_vel=v,lin_acc=self.params["jogging_acc"])
+        traj_q, traj_xy, traj_fz, time_bp=self.trajectory_generate(q_all,np.zeros(len(q_all)),np.zeros(len(q_all)),lin_vel=v,lin_acc=self.params["jogging_acc"])
 
         for i in range(len(traj_q)):
             self.read_position()
@@ -403,7 +438,7 @@ class MotionController(object):
             q_smooth_all.append(q_all[-1])
             q_all=q_smooth_all
 
-        traj_q, traj_xy, traj_fz, time_bp=self.trajectory_generate(q_all,np.zeros_like(q_all),np.zeros_like(q_all),lin_vel=v,lin_acc=self.params["jogging_acc"])
+        traj_q, traj_xy, traj_fz, time_bp=self.trajectory_generate(q_all,np.zeros(len(q_all)),np.zeros(len(q_all)),lin_vel=v,lin_acc=self.params["jogging_acc"])
 
         for i in range(len(traj_q)):
             self.read_position()
