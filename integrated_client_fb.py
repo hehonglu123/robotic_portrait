@@ -24,7 +24,7 @@ if ROBOT_NAME=='ABB_1200_5_90':
     # robot=robot_obj(ROBOT_NAME,'config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/brush_pen.csv')
     radius=500 ###eef position to robot base distance w/o z height
     # angle_range=np.array([-3*np.pi/4,-np.pi/4]) ###angle range of joint 1 for robot to move
-    angle_range=np.array([-np.pi/2,-np.pi/4]) ###angle range of joint 1 for robot to move
+    angle_range=np.array([-np.pi/2,np.pi/2]) ###angle range of joint 1 for robot to move
     height_range=np.array([500,1500]) ###height range for robot to move
     # p_start=np.array([0,-radius,700])	###initial position
     # R_start=np.array([	[0,1,0],
@@ -177,7 +177,7 @@ while True:
                 
                 if np.linalg.norm(qdot)<0.1:
                     # print(time.time()-start_time)
-                    if time.time()-start_time>3:
+                    if time.time()-start_time>1000:
                         break
                 else:
                     start_time=time.time()
