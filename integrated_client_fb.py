@@ -73,8 +73,8 @@ pixel2mm=np.loadtxt('config/pixel2mm.csv',delimiter=',') # pixel to mm ratio
 pixel2force=np.loadtxt('config/pixel2force.csv',delimiter=',') # pixel to force ratio
 ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',') # ipad pose
 H_pentip2ati=np.loadtxt('config/pentip2ati.csv',delimiter=',') # FT sensor info
-p_button=np.array([131, -92, 0]) # button position
-R_pencil=ipad_pose[:3,:3]@Ry(np.pi) # pencil orientation
+p_button=np.array([131, -92, 0]) # button position, in ipad frame
+R_pencil=ipad_pose[:3,:3]@Ry(np.pi) # pencil orientation, world frame
 hover_height=20 # height to hover above the paper
 face_track_speed=0.8 # speed to track face
 face_track_x = np.array([-np.sin(np.arctan2(p_tracking_start[1],p_tracking_start[0])),np.cos(np.arctan2(p_tracking_start[1],p_tracking_start[0])),0])
@@ -209,7 +209,7 @@ while True:
 
     ########################## portrait FaceSegmentation/GAN ##############################
     ## Face Segmentation
-    gray_image_masked,image_mask,face_mask = faceseg.get_face_mask(img)
+    gray_image_masked,image_mask,face_mask,_ = faceseg.get_face_mask(img)
     anime_img = anime.forward(gray_image_masked)
     img_gray=cv2.cvtColor(anime_img, cv2.COLOR_BGR2GRAY)
     cv2.imwrite('img_out.jpg',anime_img)

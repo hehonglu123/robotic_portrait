@@ -78,6 +78,9 @@ while True:
     print('IMAGE TAKEN')
     img = cv2.imread(test_img_path)
     
+    ### resize image to x32
+    img = anime.resize_image_x32(img)
+    
     img_st = time.time()
     # cv2.imshow('img',img)
     # cv2.waitKey(0)
@@ -85,8 +88,16 @@ while True:
 
     ########################## portrait FaceSegmentation/GAN ##############################
     ## Face Segmentation
-    gray_image_masked,image_mask,face_mask = faceseg.get_face_mask(img)
+    gray_image_masked,face_parse_mask,face_mask,faces = faceseg.get_face_mask(img)
     anime_img = anime.forward(gray_image_masked)
+
+    # print(gray_image_masked.shape)    
+    # print(anime_img.shape)
+    # anime_img_viz = facer.hwc2bchw(torch.from_numpy(anime_img)).to(device='cuda') 
+    # facer.show_bchw(facer.draw_bchw(anime_img_viz, faces))
+    plt.matshow(face_parse_mask)
+    plt.show()
+    
     img_gray=cv2.cvtColor(anime_img, cv2.COLOR_BGR2GRAY)
 
     # cv2.imshow('img',anime_img)
@@ -98,10 +109,10 @@ while True:
     planning_st = time.time()
     ###Pixel Traversal
     print('TRAVERSING PIXELS')
-    face_drawing_order=[10,1,6,7,8,9,2,3,4,5,0]
+    face_drawing_order=[10,1,6,(7,8,9),2,3,4,5,0] # hair, face, nose, upper lip, teeth, lower lip, left eyebrow, right eyebrow, left eye, right eye
     resize_ratio=np.max(np.divide(target_size,anime_img.shape[:2]))
     
-    pixel_paths, image_thresh = travel_pixel_dots(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=image_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
+    pixel_paths, image_thresh = travel_pixel_dots(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=face_parse_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
     print("travel_pixel_dots time: ", time.time()-planning_st)
     print("Image size: ", image_thresh.shape)
     ###Project to IPAD

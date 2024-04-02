@@ -89,9 +89,12 @@ def travel_pixel_dots(image,resize_ratio=2,max_radias=10,min_radias=2,max_nodes=
         image_node = np.zeros_like(image_thresh)
         # nodes = []
         nodes = {0:[]}
+        list_patches = []
         if face_mask is not None or len(face_drawing_order) > 0:
-            for i in range(len(face_drawing_order)):
-                nodes[i] = []
+            for patch in face_drawing_order:
+                nodes[patch] = []
+                if type(patch) == tuple:
+                    list_patches.append(tuple(patch))
         graph = nx.Graph()
         draw_graph_pos={}
         black_pixels_not_drew = deepcopy(black_pixels)
@@ -138,8 +141,12 @@ def travel_pixel_dots(image,resize_ratio=2,max_radias=10,min_radias=2,max_nodes=
                 
                 ## add node
                 image_node[y,x] = radias
-                if face_mask is not None or len(face_drawing_order) > 0:
+                if face_mask is not None and len(face_drawing_order) > 0:
                     face_seg = face_mask[y,x]
+                    for list_patch in list_patches:
+                        if face_seg in list_patch:
+                            face_seg = list_patch
+                            break
                     nodes[face_seg].append([x,y,radias])
                 else:
                     nodes[0].append([x,y,radias])
