@@ -78,12 +78,9 @@ while True:
     print('IMAGE TAKEN')
     img = cv2.imread(test_img_path)
     
-    ### resize image to x32
-    img = anime.resize_image_x32(img)
-    
     img_st = time.time()
-    # cv2.imshow('img',img)
-    # cv2.waitKey(0)
+    cv2.imshow('img',img)
+    cv2.waitKey(0)
     ############################################################
 
     ########################## portrait FaceSegmentation/GAN ##############################
@@ -109,10 +106,12 @@ while True:
     planning_st = time.time()
     ###Pixel Traversal
     print('TRAVERSING PIXELS')
-    face_drawing_order=[10,1,6,(7,8,9),2,3,4,5,0] # hair, face, nose, upper lip, teeth, lower lip, left eyebrow, right eyebrow, left eye, right eye
+    face_drawing_order=[10,1,(6,1),(7,8,9),(2,1),(3,1),(4,1),(5,1),0] # hair, face, nose, upper lip, teeth, lower lip, left eyebrow, right eyebrow, left eye, right eye
     resize_ratio=np.max(np.divide(target_size,anime_img.shape[:2]))
     
-    pixel_paths, image_thresh = travel_pixel_dots(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=face_parse_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
+    # pixel_paths, image_thresh = travel_pixel_dots(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=face_parse_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
+    pixel_paths, image_thresh = travel_pixel_skeletons(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=face_parse_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
+    
     print("travel_pixel_dots time: ", time.time()-planning_st)
     print("Image size: ", image_thresh.shape)
     ###Project to IPAD
@@ -132,5 +131,17 @@ while True:
 
     ####################################################################
     print('TOTAL TIME: ', time.time()-img_st)
+    
+    image_out = np.ones_like(image_thresh)*255
+    for stroke in pixel_paths:
+        for n in stroke:
+            image_out = cv2.circle(image_out, (int(n[0]), int(n[1])), round(n[2]), 0, -1)
+            image_out[int(n[1]),int(n[0])]=120
+            cv2.imshow("Image", image_out)
+            if cv2.waitKey(1) == ord('q'): 
+                # press q to terminate the loop 
+                cv2.destroyAllWindows() 
+                break 
+        input("Next stroke? (Press Enter)")
     
     input("Next round? (Press Enter)")

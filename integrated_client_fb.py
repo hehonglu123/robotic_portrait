@@ -1,6 +1,7 @@
 from RobotRaconteur.Client import *     #import RR client library
 import time, traceback, sys, cv2
 import numpy as np
+import pickle
 sys.path.append('toolbox')
 from robot_def import *
 from lambda_calc import *
@@ -117,6 +118,13 @@ anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
 
 # print(robot.fwd(mctrl.read_position()))
 # exit()
+TEMP_DATA_DIR = 'temp_data/'
+
+TAKE_FACE_IMAGE = False
+FACE_PORTRAIT = False
+PIXEL_PLAN = True
+CART_PLAN = True
+JS_PLAN = True
 
 q_init = mctrl.read_position()
 #########################################################EXECUTION#########################################################
@@ -130,83 +138,82 @@ while True:
     input("Press Enter to start next round")
 
     ###################### Face tracking ######################
-    # print("FACE TRACKING")
-    # q_cmd_prev=q_tracking_start
-    # while True:
-    #     loop_start_time=time.time()
-    #     wire_packet=bbox_wire.TryGetInValue()
-        
-        
-    #     q_cur=mctrl.read_position()
-    #     pose_cur=robot_cam.fwd(q_cur)
-    #     if mctrl.USE_RR_ROBOT:
-    #         time.sleep(mctrl.TIMESTEP)
-        
-    #     if wire_packet[0]:
-    #         bbox=wire_packet[1]
-    #         if len(bbox)==0 or (q_cur[0]<angle_range[0] or q_cur[0]>angle_range[1] or pose_cur.p[2]<height_range[0] or pose_cur.p[2]>height_range[1]):
-    #              # if no face detected, or out of range
-    #              # jog to initial position
-    #             diff=q_tracking_start-q_cur
-    #             if np.linalg.norm(diff)>face_track_speed/2:
-    #                 qdot=diff/np.linalg.norm(diff)
-    #             else:
-    #                 qdot=diff
-    #         else:	#if face detected
-    #             #calculate size of bbox
-    #             size=np.array([bbox[2]-bbox[0],bbox[3]-bbox[1]])
-    #             #calculate center of bbox
-    #             center=np.array([bbox[0]+size[0]/2,bbox[1]+size[1]/2])
-    #             y_gain=-1 # -0.8
-    #             x_gain=-0.001 # -0.08
-    #             yd=center[1]-image_center[1]
-    #             xd=center[0]-image_center[0]
-    #             try:
-    #                 q_temp=robot_cam.inv(pose_cur.p+yd*np.array([0,0,y_gain]),pose_cur.R,q_cur)[0]
-    #             except:
-    #                 continue
-    #             q_temp+=xd*np.array([x_gain,0,0,0,0,0])
-    #             q_diff=q_temp-q_cur
-    #             if np.linalg.norm(q_diff)>face_track_speed:
-    #                 qdot=face_track_speed*q_diff/np.linalg.norm(q_diff)
-    #             else:
-    #                 qdot=q_diff
-    #             # vdot = (x_gain*xd*face_track_x + y_gain*yd*face_track_y)
-    #             # vdot = y_gain*yd*face_track_y
-                
-    #             # if np.linalg.norm(vdot)>face_track_speed:
-    #             #     vdot=face_track_speed*vdot/np.linalg.norm(vdot)
-    #             # J_mat = robot.jacobian(q_cur)
-    #             # qdot = np.linalg.pinv(J_mat)@np.append(np.zeros(3),vdot)
-    #             # qdot = qdot + np.array([xd*x_gain,0,0,0,0,0])
-                
-    #             if np.linalg.norm(qdot)<0.1:
-    #                 # print(time.time()-start_time)
-    #                 if time.time()-start_time>3:
-    #                     break
-    #             else:
-    #                 start_time=time.time()
+    if TAKE_FACE_IMAGE:
+        print("FACE TRACKING")
+        q_cmd_prev=q_tracking_start
+        while True:
+            loop_start_time=time.time()
+            wire_packet=bbox_wire.TryGetInValue()
             
-    #         # send position command to robot
-    #         q_cmd=q_cmd_prev+qdot*mctrl.TIMESTEP
-    #         mctrl.position_cmd(q_cmd)
-    #         q_cmd_prev=copy.deepcopy(q_cmd)
+            
+            q_cur=mctrl.read_position()
+            pose_cur=robot_cam.fwd(q_cur)
+            if mctrl.USE_RR_ROBOT:
+                time.sleep(mctrl.TIMESTEP)
+            
+            if wire_packet[0]:
+                bbox=wire_packet[1]
+                if len(bbox)==0 or (q_cur[0]<angle_range[0] or q_cur[0]>angle_range[1] or pose_cur.p[2]<height_range[0] or pose_cur.p[2]>height_range[1]):
+                    # if no face detected, or out of range
+                    # jog to initial position
+                    diff=q_tracking_start-q_cur
+                    if np.linalg.norm(diff)>face_track_speed/2:
+                        qdot=diff/np.linalg.norm(diff)
+                    else:
+                        qdot=diff
+                else:	#if face detected
+                    #calculate size of bbox
+                    size=np.array([bbox[2]-bbox[0],bbox[3]-bbox[1]])
+                    #calculate center of bbox
+                    center=np.array([bbox[0]+size[0]/2,bbox[1]+size[1]/2])
+                    y_gain=-1 # -0.8
+                    x_gain=-0.001 # -0.08
+                    yd=center[1]-image_center[1]
+                    xd=center[0]-image_center[0]
+                    try:
+                        q_temp=robot_cam.inv(pose_cur.p+yd*np.array([0,0,y_gain]),pose_cur.R,q_cur)[0]
+                    except:
+                        continue
+                    q_temp+=xd*np.array([x_gain,0,0,0,0,0])
+                    q_diff=q_temp-q_cur
+                    if np.linalg.norm(q_diff)>face_track_speed:
+                        qdot=face_track_speed*q_diff/np.linalg.norm(q_diff)
+                    else:
+                        qdot=q_diff
+                    # vdot = (x_gain*xd*face_track_x + y_gain*yd*face_track_y)
+                    # vdot = y_gain*yd*face_track_y
+                    
+                    # if np.linalg.norm(vdot)>face_track_speed:
+                    #     vdot=face_track_speed*vdot/np.linalg.norm(vdot)
+                    # J_mat = robot.jacobian(q_cur)
+                    # qdot = np.linalg.pinv(J_mat)@np.append(np.zeros(3),vdot)
+                    # qdot = qdot + np.array([xd*x_gain,0,0,0,0,0])
+                    
+                    if np.linalg.norm(qdot)<0.1:
+                        # print(time.time()-start_time)
+                        if time.time()-start_time>3:
+                            break
+                    else:
+                        start_time=time.time()
+                
+                # send position command to robot
+                q_cmd=q_cmd_prev+qdot*mctrl.TIMESTEP
+                mctrl.position_cmd(q_cmd)
+                q_cmd_prev=copy.deepcopy(q_cmd)
 
-    # ##### Get face image #####
-    # RR_image=image_wire.TryGetInValue()
-    # if RR_image[0]:
-    #     img=RR_image[1]
-    #     img=np.array(img.data,dtype=np.uint8).reshape((img.image_info.height,img.image_info.width,3))
-    #     #get the image within the bounding box, a bit larger than the bbox
-    #     img=img[int(bbox[1]-size[1]/5):int(bbox[3]+size[1]/9),int(bbox[0]-size[0]/9):int(bbox[2]+size[0]/9),:]
-
-    
-    # print('IMAGE TAKEN')
-    # cv2.imwrite('img.jpg',img)
-
-    img = cv2.imread('img.jpg')
-    plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-    plt.show()
+        ##### Get face image #####
+        RR_image=image_wire.TryGetInValue()
+        if RR_image[0]:
+            img=RR_image[1]
+            img=np.array(img.data,dtype=np.uint8).reshape((img.image_info.height,img.image_info.width,3))
+            #get the image within the bounding box, a bit larger than the bbox
+            img=img[int(bbox[1]-size[1]/5):int(bbox[3]+size[1]/9),int(bbox[0]-size[0]/9):int(bbox[2]+size[0]/9),:]
+        print('IMAGE TAKEN')
+        cv2.imwrite(TEMP_DATA_DIR+'img.jpg',img)
+    else:
+        img = cv2.imread(TEMP_DATA_DIR+'img.jpg')
+        plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        plt.show()
 
     print("PAGE FLIPPING")
     mctrl.press_button_routine(p_button,R_pencil,h_offset=hover_height,lin_vel=controller_params['jogging_speed'], q_seed=q_seed)
@@ -218,10 +225,14 @@ while True:
 
     ########################## portrait FaceSegmentation/GAN ##############################
     ## Face Segmentation
-    gray_image_masked,image_mask,face_mask,_ = faceseg.get_face_mask(img)
-    anime_img = anime.forward(gray_image_masked)
-    img_gray=cv2.cvtColor(anime_img, cv2.COLOR_BGR2GRAY)
-    cv2.imwrite('img_out.jpg',anime_img)
+    if FACE_PORTRAIT:
+        gray_image_masked,image_mask,face_mask,_ = faceseg.get_face_mask(img)
+        anime_img = anime.forward(gray_image_masked)
+        img_gray=cv2.cvtColor(anime_img, cv2.COLOR_BGR2GRAY)
+        cv2.imwrite(TEMP_DATA_DIR+'img_out.jpg',anime_img)
+    else:
+        anime_img = cv2.imread(TEMP_DATA_DIR+'img_out.jpg')
+        img_gray=cv2.cvtColor(anime_img, cv2.COLOR_BGR2GRAY)
 
     # cv2.imshow('img',anime_img)
     # cv2.waitKey(0)
@@ -232,26 +243,42 @@ while True:
     planning_st = time.time()
     ###Pixel Traversal
     print('TRAVERSING PIXELS')
-    face_drawing_order=[10,1,6,7,8,9,2,3,4,5,0]
+    face_drawing_order=[10,1,6,(7,8,9),2,3,4,5,0]
     resize_ratio=np.mean(np.divide(target_size,anime_img.shape[:2]))
-    pixel_paths, image_thresh = travel_pixel_dots(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=image_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
+    if PIXEL_PLAN:
+        pixel_paths, image_thresh = travel_pixel_dots(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=image_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
+        pickle.dump(pixel_paths, open(TEMP_DATA_DIR+'pixel_paths.pkl', 'wb'))
+        cv2.imwrite(TEMP_DATA_DIR+'img_thresh.jpg',image_thresh)
+    else:
+        pixel_paths = pickle.load(open(TEMP_DATA_DIR+'pixel_paths.pkl', 'rb'))
+        image_thresh = cv2.imread(TEMP_DATA_DIR+'img_thresh.jpg',0)
+        
     print("Image size: ", image_thresh.shape)
     ###Project to IPAD
     print("PROJECTING TO IPAD")
-    _,cartesian_paths_world,force_paths=image2plane(image_thresh,ipad_pose,pixel2mm,pixel_paths,pixel2force)
+    if CART_PLAN:
+        _,cartesian_paths_world,force_paths=image2plane(image_thresh,ipad_pose,pixel2mm,pixel_paths,pixel2force)
+        pickle.dump(cartesian_paths_world, open(TEMP_DATA_DIR+'cartesian_paths_world.pkl', 'wb'))
+        pickle.dump(force_paths, open(TEMP_DATA_DIR+'force_paths.pkl', 'wb'))
+    else:
+        cartesian_paths_world = pickle.load(open(TEMP_DATA_DIR+'cartesian_paths_world.pkl', 'rb'))
+        force_paths = pickle.load(open(TEMP_DATA_DIR+'force_paths.pkl', 'rb'))
 
     ###Solve Joint Trajectory
     print("SOLVING JOINT TRAJECTORY")
-    js_paths=[]
-    for cartesian_path in cartesian_paths_world:
-        curve_js=robot.find_curve_js(cartesian_path,[R_pencil_base]*len(cartesian_path),q_seed)
-        js_paths.append(curve_js)
+    if JS_PLAN:
+        js_paths=[]
+        for cartesian_path in cartesian_paths_world:
+            curve_js=robot.find_curve_js(cartesian_path,[R_pencil_base]*len(cartesian_path),q_seed)
+            js_paths.append(curve_js)
+        pickle.dump(js_paths, open(TEMP_DATA_DIR+'js_paths.pkl', 'wb'))
+    else:
+        js_paths = pickle.load(open(TEMP_DATA_DIR+'js_paths.pkl', 'rb'))
     print("PLANNING TIME: ", time.time()-planning_st)
 
     ####################################EXECUTION#####################################################
     execution_st = time.time()
     
-
     print('START DRAWING')
     num_segments = len(js_paths)
     print("NUM SEGMENTS: ", num_segments)
