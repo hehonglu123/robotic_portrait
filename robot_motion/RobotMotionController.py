@@ -382,7 +382,8 @@ class MotionController(object):
                 fz_des = traj_fz[min(i+self.params['lookahead_index'],len(traj_fz)-1)]
             else:
                 fz_des = traj_fz[i]
-            f_err = fz_des-fz_now # feedback error lookahead
+            # f_err = fz_des-fz_now # feedback error lookahead
+            f_err = fz_des-force_tracked # feedback error lookahead
             v_des_z = self.force_impedence_ctrl(f_err) # force control
             # get xyz (in ipad frame) next
             next_T = self.ipad_pose_inv_T*self.robot.fwd(traj_js[i])
@@ -395,9 +396,9 @@ class MotionController(object):
             self.position_cmd(q_des)
             
             # time, force, joint angle, record
-            joint_force_exe.append(np.append(np.array([time.time()-start_time,fz_now]),q_now))
+            joint_force_exe.append(np.append(np.array([time.time()-start_time,force_tracked]),q_now))
             # time, force, xyz, record
-            cart_force_exe.append(np.append(np.array([time.time()-start_time,fz_now]),tip_now_ipad.p))
+            cart_force_exe.append(np.append(np.array([time.time()-start_time,force_tracked]),tip_now_ipad.p))
             
             if self.USE_RR_ROBOT:
                 time.sleep(self.TIMESTEP)
