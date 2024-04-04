@@ -106,13 +106,28 @@ while True:
     planning_st = time.time()
     ###Pixel Traversal
     print('TRAVERSING PIXELS')
-    face_drawing_order=[10,1,(6,1),(7,8,9),(2,1),(3,1),(4,1),(5,1),0] # hair, face, nose, upper lip, teeth, lower lip, left eyebrow, right eyebrow, left eye, right eye
+    
     resize_ratio=np.max(np.divide(target_size,anime_img.shape[:2]))
     
-    # pixel_paths, image_thresh = travel_pixel_dots(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=face_parse_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
-    pixel_paths, image_thresh = travel_pixel_skeletons(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=face_parse_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
+    face_drawing_order=[10,1,6,(7,8,9),2,3,4,5,0] # hair, face, nose, upper lip, teeth, lower lip, left eyebrow, right eyebrow, left eye, right eye
+    pixel_paths, image_thresh = travel_pixel_dots(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=face_parse_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
+    # face_drawing_order=[10,1,(6,1),(7,8,9),(2,1),(3,1),(4,1),(5,1),0] # hair, face, nose, upper lip, teeth, lower lip, left eyebrow, right eyebrow, left eye, right eye
+    # pixel_paths, image_thresh = travel_pixel_skeletons(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=face_parse_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
     
     print("travel_pixel_dots time: ", time.time()-planning_st)
+    
+    # # plot force profile
+    # path_idx = 0
+    # ave_dfdlam_std = []
+    # for pixel_path in pixel_paths:
+    #     lam = calc_lam_cs(pixel_path[:,:2])
+    #     dfdlam = np.gradient(pixel_path[:-1,2])/np.gradient(lam[:-1])
+    #     print("path_idx %d Mean dfdlam: %f, Std dfdlam: %f"%(path_idx, np.mean(dfdlam), np.std(dfdlam)))
+    #     ave_dfdlam_std.append(np.std(dfdlam))
+    #     # plt.plot(lam,pixel_path[:,2])
+    #     # plt.show()
+    # print("Average dfdlam std: %f"%(np.mean(ave_dfdlam_std)))
+    
     print("Image size: ", image_thresh.shape)
     ###Project to IPAD
     project_st = time.time()

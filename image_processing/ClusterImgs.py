@@ -52,6 +52,7 @@ def check_circle_valid(image_thresh, image_circle, bpx, bpy, radias):
 def travel_pixel_skeletons(image,resize_ratio=2,max_radias=10,min_radias=2,min_stroke_length=100,min_white_pixels=50,
                       face_mask=None,face_drawing_order=[],skip_background=False,SHOW_TSP=False):
     
+    skeleton_st = time.time()
     # rename face_mask
     face_seg_dict = {}
     for face_seg in face_drawing_order:
@@ -127,11 +128,11 @@ def travel_pixel_skeletons(image,resize_ratio=2,max_radias=10,min_radias=2,min_s
         
         
         if len(white_pixels)==0:
-            print("Number of white pixels is less than min_white_pixels")
+            print("Number of white pixels is less than min_white_pixels") if SHOW_TSP else None
             break
         print(f"Number of white pixels: {len(white_pixels[0])}")
         if len(white_pixels[0])<min_white_pixels:
-            print("Number of white pixels is less than min_white_pixels")
+            print("Number of white pixels is less than min_white_pixels") if SHOW_TSP else None
             break
 
         edge_count = 0
@@ -152,14 +153,14 @@ def travel_pixel_skeletons(image,resize_ratio=2,max_radias=10,min_radias=2,min_s
                     edge_count+=1
                     edges.append([x, y])
                 
-        print(f"Number of white pixels with 2 white neighbors: {edge_count}")
+        print(f"Number of white pixels with 2 white neighbors: {edge_count}") if SHOW_TSP else None
         
         remove_factor = 1
 
         ## find min max stroke width
         max_dist = max(dist_transform[white_pixels])
         min_dist = min(dist_transform[white_pixels])
-        print(f"Max distance: {max_dist}, Min distance: {min_dist}")
+        print(f"Max distance: {max_dist}, Min distance: {min_dist}") if SHOW_TSP else None
 
         ##### draw circle and find nodes and edges
         out_graph_pix = np.array([white_pixels[1],white_pixels[0]]).T
@@ -231,9 +232,12 @@ def travel_pixel_skeletons(image,resize_ratio=2,max_radias=10,min_radias=2,min_s
         
         count+=1
 
+    print("skeleton time pass",time.time()-skeleton_st) if SHOW_TSP else None
+
+    tsp_st=time.time()
     ## check isolation
     graph.remove_nodes_from(list(nx.isolates(graph)))
-    print("Total nodes: ", graph.number_of_nodes(), "Total edges: ", graph.number_of_edges())
+    print("Total nodes: ", graph.number_of_nodes(), "Total edges: ", graph.number_of_edges()) if SHOW_TSP else None
     options = {
     'node_color': 'black',
     'node_size': 10,
@@ -244,10 +248,10 @@ def travel_pixel_skeletons(image,resize_ratio=2,max_radias=10,min_radias=2,min_s
     # find subgraphs
     subgraphs = [graph.subgraph(c).copy() for c in nx.connected_components(graph)]
     total_g=len(subgraphs)
-    print('Total subgraphs: ', total_g)
+    print('Total subgraphs: ', total_g) if SHOW_TSP else None
     graph_count=1
     for subg in subgraphs:    
-        print("graph: ",graph_count,"/",total_g," nodes: ",subg.number_of_nodes(), " edges: ", subg.number_of_edges())
+        print("graph: ",graph_count,"/",total_g," nodes: ",subg.number_of_nodes(), " edges: ", subg.number_of_edges()) if SHOW_TSP else None
         connetion_path = nx.approximation.traveling_salesman_problem(subg, cycle=True)
         connetion_path = list(connetion_path)
         if subg.number_of_nodes()>2:
@@ -263,15 +267,31 @@ def travel_pixel_skeletons(image,resize_ratio=2,max_radias=10,min_radias=2,min_s
         # plt.show()
         
         graph_count+=1
-    print("Total strokes: ", len(strokes_split))
-    print("End tsp...")
-
+    print("Total strokes: ", len(strokes_split)) if SHOW_TSP else None
+    print("End tsp...") if SHOW_TSP else None
+    print("tsp time pass",time.time()-tsp_st) if SHOW_TSP else None
+    
     strokes = strokes_split
     
     return strokes, image
 
 def travel_pixel_dots(image,resize_ratio=2,max_radias=10,min_radias=2,max_nodes=1500,max_edges=2500,max_pixel=250000,
                       blank_thres=1.5,leave_paper_weight=2,face_mask=None,face_drawing_order=[],skip_background=False,SHOW_TSP=False):
+    
+    # rename face_mask
+    face_seg_dict = {}
+    for face_seg in face_drawing_order:
+        if type(face_seg) == tuple:
+            for face_seg_i in face_seg:
+                if face_seg_i not in face_seg_dict:
+                    face_seg_dict[face_seg_i] = [face_seg]
+                else:
+                    face_seg_dict[face_seg_i].append(face_seg)
+        else:
+            if face_seg not in face_seg_dict:
+                face_seg_dict[face_seg] = [face_seg]
+            else:
+                face_seg_dict[face_seg].append(face_seg)
     
     ## convert image to gray
     image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
