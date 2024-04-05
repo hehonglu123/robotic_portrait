@@ -38,7 +38,8 @@ def image2plane(img,ipad_pose,pixel2mm,pixel_paths,pixel2force):
 
 def main():
     # img_name='eric_name_out'
-    img_name='wen_name_out'
+    # img_name='wen_name_out'
+    img_name='logos_words'
     # img_name='me_out'
     # img_name='new_year_out'
     # img_name='ilc_path1'

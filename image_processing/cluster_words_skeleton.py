@@ -15,7 +15,8 @@ CODE_PATH = '../'
 # img_name = 'wen_name_out'
 # img_name = 'eric_name_out'
 # img_name = 'new_year_out'
-img_name = 'ilc_path2'
+# img_name = 'ilc_path2'
+img_name = 'logos_words'
 # img_name = 'yong'
 img_dir = '../imgs/'
 
@@ -28,13 +29,15 @@ image_path = Path(img_dir+img_name+'.png')
 image = cv2.imread(str(image_path))
 ## convert image to gray
 image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+plt.imshow(image_gray, cmap='gray')
+plt.show()
 ## thresholding
-_, image_thresh = cv2.threshold(image_gray, 15, 255, cv2.THRESH_BINARY)
+_, image_thresh = cv2.threshold(image_gray, 100, 255, cv2.THRESH_BINARY)
 # show image
 plt.imshow(image_thresh, cmap='gray')
 plt.show()
 
-max_width = 11 # in pixels
+max_width = 12 # in pixels
 while True:
 
     # invert image_thresh
@@ -197,7 +200,10 @@ for i in range(len(all_paths)):
         this_p = list(all_paths[i][j])
         this_p.append(width)
         stroke.append(this_p)
-    strokes_split.append(stroke)
+    if i==0 or i==3:
+        strokes_split.append(stroke[::-1])
+    else:
+        strokes_split.append(stroke)
 strokes=strokes_split
 if save_paths:
     ## save to strokes to file
@@ -208,9 +214,11 @@ if save_paths:
     cv2.imwrite('../imgs/'+img_name+'_resized.png', image_thresh)
 
 image_out = np.ones_like(image_thresh_flip)*255
-for draw_subpath in all_paths:
+for draw_subpath in strokes_split:
     for n in draw_subpath:
-        print(n)
-        image_out = cv2.circle(image_out, n, round(graph.nodes[n]['width']), 0, -1)
+        # print(n)
+        image_out = cv2.circle(image_out, n[:2], round(n[2]), 0, -1)
         cv2.imshow("Image", image_out)
-        cv2.waitKey(0)
+        cv2.waitKey(1)
+cv2.imshow("Image", image_out)
+cv2.waitKey(0)
