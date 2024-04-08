@@ -54,29 +54,31 @@ def travel_pixel_skeletons(image,resize_ratio=2,max_radias=10,min_radias=2,min_s
     
     skeleton_st = time.time()
     # rename face_mask
-    face_seg_dict = {}
-    for face_seg in face_drawing_order:
-        if type(face_seg) == tuple:
-            for face_seg_i in face_seg:
-                if face_seg_i not in face_seg_dict:
-                    face_seg_dict[face_seg_i] = [face_seg]
-                else:
-                    face_seg_dict[face_seg_i].append(face_seg)
-        else:
-            if face_seg not in face_seg_dict:
-                face_seg_dict[face_seg] = [face_seg]
+    if face_mask is not None:
+        face_seg_dict = {}
+        for face_seg in face_drawing_order:
+            if type(face_seg) == tuple:
+                for face_seg_i in face_seg:
+                    if face_seg_i not in face_seg_dict:
+                        face_seg_dict[face_seg_i] = [face_seg]
+                    else:
+                        face_seg_dict[face_seg_i].append(face_seg)
             else:
-                face_seg_dict[face_seg].append(face_seg)
+                if face_seg not in face_seg_dict:
+                    face_seg_dict[face_seg] = [face_seg]
+                else:
+                    face_seg_dict[face_seg].append(face_seg)
     #### image preprocessing
     # convert image to gray
     image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     # thresholding
-    _, image = cv2.threshold(image_gray, 15, 255, cv2.THRESH_BINARY)
+    # _, image = cv2.threshold(image_gray, 15, 255, cv2.THRESH_BINARY)
+    _, image = cv2.threshold(image_gray, 100, 255, cv2.THRESH_BINARY)
     image = cv2.resize(image, (int(image.shape[1]*resize_ratio), int(image.shape[0]*resize_ratio)), interpolation = cv2.INTER_NEAREST)
     if face_mask is not None:
         face_mask = cv2.resize(face_mask, (image.shape[1], image.shape[0]), interpolation = cv2.INTER_NEAREST)
     print("image size: ",image.shape) if SHOW_TSP else None
-    print("face mask size: ",face_mask.shape) if SHOW_TSP else None
+    print("face mask size: ",face_mask.shape) if SHOW_TSP and face_mask is not None else None
     image_filled = deepcopy(image)
     image_vis = deepcopy(image)*2/3
 
@@ -201,17 +203,23 @@ def travel_pixel_skeletons(image,resize_ratio=2,max_radias=10,min_radias=2,min_s
                 continue
             # draw edge if there's one
             edges_node_ids = np.where(np.linalg.norm(in_graph_pix[:-1]-in_graph_pix[-1],axis=1)<=in_graph_radius[:-1]+in_graph_radius[-1])[0]
+            
             for eni in edges_node_ids:
-                group1 = face_seg_dict[face_mask[in_graph_pix[eni][1],in_graph_pix[eni][0]]]
-                group2 = face_seg_dict[face_mask[in_graph_pix[-1][1],in_graph_pix[-1][0]]]
-                
-                for g1 in group1:
-                    for g2 in group2:
-                        if g1 == g2:
-                            # graph.add_edge(tuple(np.append(in_graph_pix[eni],in_graph_radius[eni])),this_node_name\
-                            #     ,weight=np.linalg.norm(np.append(in_graph_pix[eni]-in_graph_pix[-1],in_graph_radius[eni]-in_graph_radius[-1])))
-                            graph.add_edge(tuple(np.append(in_graph_pix[eni],in_graph_radius[eni])),this_node_name\
-                                ,weight=np.linalg.norm(in_graph_pix[eni]-in_graph_pix[-1]))
+                if face_mask is not None:
+                    group1 = face_seg_dict[face_mask[in_graph_pix[eni][1],in_graph_pix[eni][0]]]
+                    group2 = face_seg_dict[face_mask[in_graph_pix[-1][1],in_graph_pix[-1][0]]]
+                    for g1 in group1:
+                        for g2 in group2:
+                            if g1 == g2:
+                                # graph.add_edge(tuple(np.append(in_graph_pix[eni],in_graph_radius[eni])),this_node_name\
+                                #     ,weight=np.linalg.norm(np.append(in_graph_pix[eni]-in_graph_pix[-1],in_graph_radius[eni]-in_graph_radius[-1])))
+                                graph.add_edge(tuple(np.append(in_graph_pix[eni],in_graph_radius[eni])),this_node_name\
+                                    ,weight=np.linalg.norm(in_graph_pix[eni]-in_graph_pix[-1]))
+                else:
+                    graph.add_edge(tuple(np.append(in_graph_pix[eni],in_graph_radius[eni])),this_node_name\
+                        ,weight=np.linalg.norm(np.append(in_graph_pix[eni]-in_graph_pix[-1],in_graph_radius[eni]-in_graph_radius[-1])))
+                    # graph.add_edge(tuple(np.append(in_graph_pix[eni],in_graph_radius[eni])),this_node_name\
+                    #     ,weight=np.linalg.norm(in_graph_pix[eni]-in_graph_pix[-1]))
             
             if False:
                 # if len(edges_node_ids)==0:
@@ -457,14 +465,28 @@ def main():
     # Read image
     img_name='me_out'
     # image_path = Path("../imgs/"+img_name+".png")
-    image_path = Path("../temp_data/img_out.jpg")
+    # image_path = Path("../temp_data/img_out.jpg")
+    image_path = Path("../imgs/logos.png")
     image = cv2.imread(str(image_path))
     print("image shape: ",image.shape)
 
     # Get pixel paths
     st = time.time()
-    strokes, image_thresh = travel_pixel_dots(image,resize_ratio=2,max_radias=10,min_radias=2,SHOW_TSP=True)
+    # strokes, image_thresh = travel_pixel_dots(image,resize_ratio=2,max_radias=10,min_radias=2,SHOW_TSP=True)
+    strokes, image_thresh = travel_pixel_skeletons(image,resize_ratio=0.5,max_radias=10,min_radias=2,SHOW_TSP=True)
     print("time: ",time.time()-st)
+    
+    image_out = np.ones_like(image_thresh)*255
+    for stroke in strokes:
+        for n in stroke:
+            image_out = cv2.circle(image_out, (int(n[0]), int(n[1])), round(n[2]), 0, -1)
+            image_out[int(n[1]),int(n[0])]=120
+            cv2.imshow("Image", image_out)
+            if cv2.waitKey(1) == ord('q'): 
+                # press q to terminate the loop 
+                cv2.destroyAllWindows() 
+                break 
+        input("Next stroke? (Press Enter)")
 
     if save_paths:
         ## save to strokes to file

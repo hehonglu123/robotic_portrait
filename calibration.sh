@@ -1,1 +1,1 @@
-python3 calibration_gui.py --tool-file=heh6_pen --robot-name=ABB
+python3 calibration_gui_aruco.py --tool-file=heh6_pen --robot-name=ABB

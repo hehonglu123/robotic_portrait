@@ -201,9 +201,9 @@ with RR.ServerNodeSetup("experimental.face_tracking", 52222):
 
 				if VIZ_FRAME :
 					if frame_viz is not None:
-						cv2.imshow("Frame", cv2.resize(frame_viz, (900,900)))
+						cv2.imshow("Frame", cv2.resize(frame_viz, (450,450)))
 					else:
-						cv2.imshow("Frame", cv2.resize(frame, (900,900)))
+						cv2.imshow("Frame", cv2.resize(frame, (450,450)))
 					cv2.waitKey(1)
 
 				###find the largest bbox

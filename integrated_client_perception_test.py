@@ -1,6 +1,7 @@
 from RobotRaconteur.Client import *     #import RR client library
 import time, traceback, sys, cv2
 import numpy as np
+import glob
 sys.path.append('toolbox')
 from robot_def import *
 from lambda_calc import *
@@ -70,84 +71,132 @@ anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
 # exit()
 
 test_img_path = 'temp_data/img1.jpg'
+# test_img_path = 'imgs/logo.png'
+test_logo = 'logos_words'
 #########################################################EXECUTION#########################################################
 while True:
-    start_time=time.time()
+    # start_time=time.time()
     
-    ### simulating image capture
-    print('IMAGE TAKEN')
-    img = cv2.imread(test_img_path)
+    # ### simulating image capture
+    # print('IMAGE TAKEN')
+    # img = cv2.imread(test_img_path)
     
-    img_st = time.time()
-    cv2.imshow('img',img)
-    cv2.waitKey(0)
-    ############################################################
-
-    ########################## portrait FaceSegmentation/GAN ##############################
-    ## Face Segmentation
-    gray_image_masked,face_parse_mask,face_mask,faces = faceseg.get_face_mask(img)
-    anime_img = anime.forward(gray_image_masked)
-
-    # print(gray_image_masked.shape)    
-    # print(anime_img.shape)
-    # anime_img_viz = facer.hwc2bchw(torch.from_numpy(anime_img)).to(device='cuda') 
-    # facer.show_bchw(facer.draw_bchw(anime_img_viz, faces))
-    plt.matshow(face_parse_mask)
-    plt.show()
-    
-    img_gray=cv2.cvtColor(anime_img, cv2.COLOR_BGR2GRAY)
-
-    # cv2.imshow('img',anime_img)
+    # img_st = time.time()
+    # cv2.imshow('img',img)
     # cv2.waitKey(0)
-    print("IMAGE PROCESSING TIME: ", time.time()-img_st)
-    ####################################################################
+    # ############################################################
+
+    # ########################## portrait FaceSegmentation/GAN ##############################
+    # ## Face Segmentation
+    # gray_image_masked,face_parse_mask,face_mask,faces = faceseg.get_face_mask(img)
+    # anime_img = anime.forward(gray_image_masked)
+
+    # # print(gray_image_masked.shape)    
+    # # print(anime_img.shape)
+    # # anime_img_viz = facer.hwc2bchw(torch.from_numpy(anime_img)).to(device='cuda') 
+    # # facer.show_bchw(facer.draw_bchw(anime_img_viz, faces))
+    # plt.matshow(face_parse_mask)
+    # plt.show()
     
-    ####################################PLANNING#####################################################
-    planning_st = time.time()
-    ###Pixel Traversal
-    print('TRAVERSING PIXELS')
+    # img_gray=cv2.cvtColor(anime_img, cv2.COLOR_BGR2GRAY)
+
+    # # cv2.imshow('img',anime_img)
+    # # cv2.waitKey(0)
+    # print("IMAGE PROCESSING TIME: ", time.time()-img_st)
+    # ####################################################################
     
-    resize_ratio=np.max(np.divide(target_size,anime_img.shape[:2]))
+    # ####################################PLANNING#####################################################
+    # planning_st = time.time()
+    # ###Pixel Traversal
+    # print('TRAVERSING PIXELS')
     
-    face_drawing_order=[10,1,6,(7,8,9),2,3,4,5,0] # hair, face, nose, upper lip, teeth, lower lip, left eyebrow, right eyebrow, left eye, right eye
-    pixel_paths, image_thresh = travel_pixel_dots(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=face_parse_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
+    # resize_ratio=np.max(np.divide(target_size,anime_img.shape[:2]))
+    
+    # # face_drawing_order=[10,1,6,(7,8,9),2,3,4,5,0] # hair, face, nose, upper lip, teeth, lower lip, left eyebrow, right eyebrow, left eye, right eye
+    # # pixel_paths, image_thresh = travel_pixel_dots(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=face_parse_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
     # face_drawing_order=[10,1,(6,1),(7,8,9),(2,1),(3,1),(4,1),(5,1),0] # hair, face, nose, upper lip, teeth, lower lip, left eyebrow, right eyebrow, left eye, right eye
     # pixel_paths, image_thresh = travel_pixel_skeletons(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=face_parse_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
     
-    print("travel_pixel_dots time: ", time.time()-planning_st)
+    image_thresh = np.zeros((1244,800))*255
+    print(image_thresh.shape)
+    # print("travel_pixel_dots time: ", time.time()-planning_st)
     
-    # # plot force profile
-    # path_idx = 0
-    # ave_dfdlam_std = []
-    # for pixel_path in pixel_paths:
-    #     lam = calc_lam_cs(pixel_path[:,:2])
-    #     dfdlam = np.gradient(pixel_path[:-1,2])/np.gradient(lam[:-1])
-    #     print("path_idx %d Mean dfdlam: %f, Std dfdlam: %f"%(path_idx, np.mean(dfdlam), np.std(dfdlam)))
-    #     ave_dfdlam_std.append(np.std(dfdlam))
-    #     # plt.plot(lam,pixel_path[:,2])
-    #     # plt.show()
-    # print("Average dfdlam std: %f"%(np.mean(ave_dfdlam_std)))
+    # # # plot force profile
+    # # path_idx = 0
+    # # ave_dfdlam_std = []
+    # # for pixel_path in pixel_paths:
+    # #     lam = calc_lam_cs(pixel_path[:,:2])
+    # #     dfdlam = np.gradient(pixel_path[:-1,2])/np.gradient(lam[:-1])
+    # #     print("path_idx %d Mean dfdlam: %f, Std dfdlam: %f"%(path_idx, np.mean(dfdlam), np.std(dfdlam)))
+    # #     ave_dfdlam_std.append(np.std(dfdlam))
+    # #     # plt.plot(lam,pixel_path[:,2])
+    # #     # plt.show()
+    # # print("Average dfdlam std: %f"%(np.mean(ave_dfdlam_std)))
     
-    print("Image size: ", image_thresh.shape)
-    ###Project to IPAD
-    project_st = time.time()
+    # print("Image size: ", image_thresh.shape)
+    # ###Project to IPAD
+    # project_st = time.time()
+    # print("PROJECTING TO IPAD")
+    # _,cartesian_paths_world,force_paths=image2plane(image_thresh,ipad_pose,pixel2mm,pixel_paths,pixel2force)
+    # print("image2plane time: ", time.time()-project_st)
+    # ###Solve Joint Trajectory
+    # ik_st = time.time()
+    # print("SOLVING JOINT TRAJECTORY")
+    # js_paths=[]
+    # for cartesian_path in cartesian_paths_world:
+    #     curve_js=robot.find_curve_js(cartesian_path,[R_pencil]*len(cartesian_path),q_seed)
+    #     js_paths.append(curve_js)
+    # print("find_curve_js time: ", time.time()-ik_st)
+    # print("PLANNING TIME: ", time.time()-planning_st)
+
+    # ####################################################################
+    # print('TOTAL TIME: ', time.time()-img_st)
+    
+    # image_out = np.ones_like(image_thresh)*255
+    # for stroke in pixel_paths:
+    #     for n in stroke:
+    #         image_out = cv2.circle(image_out, (int(n[0]), int(n[1])), round(n[2]), 0, -1)
+    #         image_out[int(n[1]),int(n[0])]=120
+    #         cv2.imshow("Image", image_out)
+    #         if cv2.waitKey(1) == ord('q'): 
+    #             # press q to terminate the loop 
+    #             cv2.destroyAllWindows() 
+    #             break 
+    #     input("Next stroke? (Press Enter)")
+    
+    ####### write words
+    num_segments=len(glob.glob('path/pixel_path/'+test_logo+'/*.csv'))
+    img=cv2.imread('imgs/'+test_logo+'_resized.png')
+    # replocate the image
+    img_new = np.ones((image_thresh.shape[0]+2*img.shape[0],image_thresh.shape[1]+2*img.shape[1],3))*255
+    pixel_offset = np.array([image_thresh.shape[1]+img.shape[1],0])
+    img_new[pixel_offset[1]:img.shape[0]+pixel_offset[1],pixel_offset[0]:pixel_offset[0]+img.shape[1]]=img
+    img = img_new
+    # relocate paths
+    pixel_paths=[]
+    for i in range(num_segments):
+        pixel_paths.append(np.loadtxt('path/pixel_path/'+test_logo+'/%i.csv'%i,delimiter=',').reshape((-1,3)))
+        pixel_paths[-1][:,:2]+=pixel_offset
+    
     print("PROJECTING TO IPAD")
-    _,cartesian_paths_world,force_paths=image2plane(image_thresh,ipad_pose,pixel2mm,pixel_paths,pixel2force)
-    print("image2plane time: ", time.time()-project_st)
-    ###Solve Joint Trajectory
-    ik_st = time.time()
+    _,cartesian_paths_world,force_paths=image2plane(img,ipad_pose,pixel2mm,pixel_paths,pixel2force)
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    for i in range(len(cartesian_paths_world)):
+        ###plot out the path in 3D
+        ax.plot(cartesian_paths_world[i][:,0], cartesian_paths_world[i][:,1], cartesian_paths_world[i][:,2], 'b')
+    ax.set_xlabel('X Label')
+    ax.set_ylabel('Y Label')
+    ax.set_zlabel('Z Label')
+    plt.show()
+    
     print("SOLVING JOINT TRAJECTORY")
     js_paths=[]
     for cartesian_path in cartesian_paths_world:
         curve_js=robot.find_curve_js(cartesian_path,[R_pencil]*len(cartesian_path),q_seed)
         js_paths.append(curve_js)
-    print("find_curve_js time: ", time.time()-ik_st)
-    print("PLANNING TIME: ", time.time()-planning_st)
-
-    ####################################################################
-    print('TOTAL TIME: ', time.time()-img_st)
-    
-    image_out = np.ones_like(image_thresh)*255
+        
+    image_out = np.ones_like(img)*255
     for stroke in pixel_paths:
         for n in stroke:
             image_out = cv2.circle(image_out, (int(n[0]), int(n[1])), round(n[2]), 0, -1)
@@ -157,6 +206,5 @@ while True:
                 # press q to terminate the loop 
                 cv2.destroyAllWindows() 
                 break 
-        input("Next stroke? (Press Enter)")
     
     input("Next round? (Press Enter)")

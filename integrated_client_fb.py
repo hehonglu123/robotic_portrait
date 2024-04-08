@@ -2,6 +2,7 @@ from RobotRaconteur.Client import *     #import RR client library
 import time, traceback, sys, cv2
 import numpy as np
 import pickle
+import glob
 sys.path.append('toolbox')
 from robot_def import *
 from lambda_calc import *
@@ -311,4 +312,69 @@ while True:
 
     print("EXECUTION TIME: ", time.time()-execution_st)
     ####################################################################
+    
+    ########### Logo words ###########
+    ####### write words
+    try:
+        img = cv2.imread(TEMP_DATA_DIR+'img_logo.png')
+        pixel_paths = pickle.load(open(TEMP_DATA_DIR+'pixel_paths_logo.pkl', 'rb'))
+        cartesian_paths_world = pickle.load(open(TEMP_DATA_DIR+'cartesian_paths_world_logo.pkl', 'rb'))
+        js_paths = pickle.load(open(TEMP_DATA_DIR+'js_paths_logo.pkl', 'rb'))
+    except:
+        num_segments=len(glob.glob('path/pixel_path/'+test_logo+'/*.csv'))
+        img=cv2.imread('imgs/'+test_logo+'_resized.png')
+        # replocate the image
+        img_new = np.ones((image_thresh.shape[0]+2*img.shape[0],image_thresh.shape[1]+2*img.shape[1],3))*255
+        pixel_offset = np.array([image_thresh.shape[1]+img.shape[1],0])
+        img_new[pixel_offset[1]:img.shape[0]+pixel_offset[1],pixel_offset[0]:pixel_offset[0]+img.shape[1]]=img
+        img = img_new
+        cv2.imwrite(TEMP_DATA_DIR+'img_logo.png',img)
+        # relocate paths
+        pixel_paths=[]
+        for i in range(num_segments):
+            pixel_paths.append(np.loadtxt('path/pixel_path/'+test_logo+'/%i.csv'%i,delimiter=',').reshape((-1,3)))
+            pixel_paths[-1][:,:2]+=pixel_offset
+        pickle.dump(pixel_paths, open(TEMP_DATA_DIR+'pixel_paths_logo.pkl', 'wb'))
+        
+        print("PROJECTING TO IPAD")
+        _,cartesian_paths_world,force_paths=image2plane(img,ipad_pose,pixel2mm,pixel_paths,pixel2force)
+        pickle.dump(cartesian_paths_world, open(TEMP_DATA_DIR+'cartesian_paths_world_logo.pkl', 'wb'))
+        
+        print("SOLVING JOINT TRAJECTORY")
+        js_paths=[]
+        for cartesian_path in cartesian_paths_world:
+            curve_js=robot.find_curve_js(cartesian_path,[R_pencil]*len(cartesian_path),q_seed)
+            js_paths.append(curve_js)
+        pickle.dump(js_paths, open(TEMP_DATA_DIR+'js_paths_logo.pkl', 'wb'))
+    ### Execute
+    execution_st = time.time()
+    
+    print('START DRAWING LOGO')
+    num_segments = len(js_paths)
+    print("LOGO NUM SEGMENTS: ", num_segments)
+    ###Execute
+    for i in range(0,num_segments):
+        if len(js_paths[i])<=1:
+            continue
+        cartesian_path_world = cartesian_paths_world[i]
+        force_path = force_paths[i]
+        curve_xyz = np.dot(mctrl.ipad_pose_inv[:3,:3],cartesian_path_world.T).T+np.tile(mctrl.ipad_pose_inv[:3,-1],(len(cartesian_path_world),1))
+        curve_xy = curve_xyz[:,:2] # get xy curve
+        fz_des = force_path*(-1) # transform to tip desired
+        lam = calc_lam_js(js_paths[i],mctrl.robot) # get path length
+        if lam[-1] < smallest_lam:
+            continue
+        traj_q, traj_xy, traj_fz, time_bp = mctrl.trajectory_generate(js_paths[i],curve_xy,fz_des) # get trajectory and time_bp
+        #### motion start ###
+        mctrl.motion_start_routine(traj_q[0],traj_fz[0],hover_height,2,lin_vel=controller_params['jogging_speed'])
+        joint_force_exe, cart_force_exe = mctrl.trajectory_force_PIDcontrol(traj_xy,traj_q,traj_fz,force_lookahead=True)
+        mctrl.motion_end_routine(traj_q[-1],hover_height, lin_vel=controller_params['jogging_speed'])
+
+    #jog to end point
+    mctrl.motion_end_routine(traj_q[-1],hover_height*4, lin_vel=controller_params['jogging_speed'])
+
+    print('FINISHED DRAWING')
+    #######################################
+    
+    
     print('TOTAL TIME: ', time.time()-img_st)
