@@ -185,10 +185,6 @@ def save_p(filename):
 
 		messagebox.showinfo('Message', 'pose saved')
 
-def save_p_aruco(filename):
-    global vel_ctrl, robot_kin, p_all
-    pass
-
 def clear_p():
 	global p_all
 	p_all=[]
@@ -233,7 +229,6 @@ label.after(250,update_label)
 
 save=Button(top,text='save')
 clear=Button(top,text='clear')
-use_aruco=Button(top,text='use aruco')
 left=Button(top,text='left')
 right=Button(top,text='right')
 forward=Button(top,text='forward')
@@ -267,7 +262,6 @@ gripper=Button(top,text='gripper off',command=lambda: gripper_ctrl(tool),bg='red
 
 save.bind('<ButtonPress-1>', lambda event: save_p(args.save_file))
 clear.bind('<ButtonPress-1>', lambda event: clear_p())
-use_aruco.bind('<ButtonPress-1>', lambda event: import_module('aruco_test'))
 left.bind('<ButtonPress-1>', lambda event: move([0,20,0],np.eye(3)))
 right.bind('<ButtonPress-1>', lambda event: move([0,-20,0],np.eye(3)))
 forward.bind('<ButtonPress-1>', lambda event: move([20,0,0],np.eye(3)))
