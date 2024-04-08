@@ -285,12 +285,12 @@ class MotionController(object):
         time_stamps = np.arange(0,time_bp[-1],self.TIMESTEP)
         time_stamps = np.append(time_stamps,time_bp[-1])
 
-        polyfit=CubicSpline(time_bp,curve_js, bc_type='natural')
-        traj_q_p = polyfit(time_stamps)
-        polyfit=CubicSpline(time_bp,curve_xy, bc_type='natural')
-        traj_xy_p = polyfit(time_stamps)
-        polyfit=CubicSpline(time_bp,force_path, bc_type='natural')
-        traj_fz_p = polyfit(time_stamps)
+        # polyfit=CubicSpline(time_bp,curve_js, bc_type='natural')
+        # traj_q_p = polyfit(time_stamps)
+        # polyfit=CubicSpline(time_bp,curve_xy, bc_type='natural')
+        # traj_xy_p = polyfit(time_stamps)
+        # polyfit=CubicSpline(time_bp,force_path, bc_type='natural')
+        # traj_fz_p = polyfit(time_stamps)
 
 
         # Calculate the number of steps for the trajectory
@@ -361,7 +361,8 @@ class MotionController(object):
             tip_now = self.robot.fwd(q_now)
             tip_now_ipad = self.ipad_pose_inv_T*tip_now
             # read force
-            ft_tip = self.ad_ati2pentip_T@np.append(np.zeros(3),self.ft_reading[3:])
+            ft_tip = self.ad_ati2pentip_T@self.ft_reading
+            # ft_tip = self.ad_ati2pentip_T@np.append(np.zeros(3),self.ft_reading[3:])
             # fz_now = float(ft_tip[-1])
             fz_now = float(self.ft_reading[-1])
             # apply low pass filter

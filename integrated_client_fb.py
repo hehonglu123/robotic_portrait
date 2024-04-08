@@ -87,7 +87,7 @@ smallest_lam = 20 # smallest path length (unit: mm)
 controller_params = {
     "force_ctrl_damping": 200.0, # 180, 90, 60
     "force_epsilon": 0.1, # Unit: N
-    "moveL_speed_lin": 10.0, # Unit: mm/sec
+    "moveL_speed_lin": 10.0, # 10 Unit: mm/sec
     "moveL_acc_lin": 0.6, # Unit: mm/sec^2
     "moveL_speed_ang": np.radians(10), # Unit: rad/sec
     "trapzoid_slope": 1, # trapzoidal load profile. Unit: N/sec
@@ -97,7 +97,7 @@ controller_params = {
     "lookahead_time": 0.02, # Unit: sec
     "jogging_speed": 100, # Unit: mm/sec
     "jogging_acc": 25, # Unit: mm/sec^2
-    'force_filter_alpha': 0.9 # force low pass filter alpha
+    'force_filter_alpha': 0.95 # force low pass filter alpha
     }
 ### Define the motion controller
 mctrl=MotionController(robot,ipad_pose,H_pentip2ati,controller_params,TIMESTEP,USE_RR_ROBOT=USE_RR_ROBOT,
@@ -119,9 +119,10 @@ anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
 # print(robot.fwd(mctrl.read_position()))
 # exit()
 TEMP_DATA_DIR = 'temp_data/'
+# TEMP_DATA_DIR = 'imgs/'
 
 TAKE_FACE_IMAGE = False
-FACE_PORTRAIT = False
+FACE_PORTRAIT = True
 PIXEL_PLAN = True
 CART_PLAN = True
 JS_PLAN = True
@@ -242,11 +243,14 @@ while True:
     ####################################PLANNING#####################################################
     planning_st = time.time()
     ###Pixel Traversal
-    print('TRAVERSING PIXELS')
-    face_drawing_order=[10,1,6,(7,8,9),2,3,4,5,0]
+    print('TRAVERSING PIXELS')    
     resize_ratio=np.mean(np.divide(target_size,anime_img.shape[:2]))
     if PIXEL_PLAN:
-        pixel_paths, image_thresh = travel_pixel_dots(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=image_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
+        # face_drawing_order=[10,1,6,(7,8,9),2,3,4,5,0]
+        # pixel_paths, image_thresh = travel_pixel_dots(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=image_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
+        
+        face_drawing_order=[10,1,(6,1),(7,8,9),(2,1),(3,1),(4,1),(5,1),0] # hair, face, nose, upper lip, teeth, lower lip, left eyebrow, right eyebrow, left eye, right eye
+        pixel_paths, image_thresh = travel_pixel_skeletons(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=image_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
         pickle.dump(pixel_paths, open(TEMP_DATA_DIR+'pixel_paths.pkl', 'wb'))
         cv2.imwrite(TEMP_DATA_DIR+'img_thresh.jpg',image_thresh)
     else:
