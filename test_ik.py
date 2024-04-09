@@ -6,6 +6,10 @@ sys.path.append('toolbox')
 from robot_def import *
 
 robot=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/heh6_pen.csv')
+robot_cam=robot_obj('ABB_1200_5_90','config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/camera.csv')
+
+print(robot_cam.fwd(np.zeros(6)))
+exit()
 
 dt_arr = []
 for i in range(10000):

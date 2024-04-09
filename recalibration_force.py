@@ -109,14 +109,14 @@ paper_size=np.loadtxt('config/paper_size.csv',delimiter=',')
 R_pencil=ipad_pose[:3,:3]@Ry(np.pi)
 
 
-corners_offset=np.array([[-1,1,0],[1,1,0],[1,-1,0],[-1,-1,0]])*1.2*np.array([paper_size[0],paper_size[1],0])/2
+corners_offset=np.array([[-1,1,0],[1,1,0],[1,-1,0],[-1,-1,0]])*1*np.array([paper_size[0],paper_size[1],0])/2
 corners=np.dot(ipad_pose[:3,:3],corners_offset.T).T+np.tile(ipad_pose[:3,-1],(4,1))
 
 ###loop four corners to get precise position base on force feedback
 corners_adjusted=[]
 f_d=1	#10N push down
 for corner in corners:
-	corner_top=corner+10*ipad_pose[:3,-2]
+	corner_top=corner+20*ipad_pose[:3,-2]
 	corner_top_safe=corner+50*ipad_pose[:3,-2]
 	print(corner_top)
 	print(corner_top_safe)
@@ -124,15 +124,16 @@ for corner in corners:
 	q_corner_top=robot.inv(corner_top,R_pencil,q_seed)[0]	###initial joint position
 	q_corner_top_safe=robot.inv(corner_top_safe,R_pencil,q_seed)[0]
 	jog_joint_position_cmd(q_corner_top_safe,v=0.2,wait_time=0.1)
+	input("Push")
 	jog_joint_position_cmd(q_corner_top,v=0.2,wait_time=0.5)
 
-	time.sleep(0.5)
+	time.sleep(0.1)
 	# ati_tf.set_tare_from_ft()	#clear bias
 	RR_ati_cli.setf_param("set_tare", RR.VarValue(True, "bool")) # clear bias
 	# res, tf, status = ati_tf.try_read_ft_streaming(.1)###get force feedback
-	time.sleep(0.5)
+	time.sleep(0.1)
 	RR_ati_cli.setf_param("set_tare", RR.VarValue(True, "bool")) # clear bias
-	time.sleep(0.5)
+	time.sleep(0.1)
 	input(ft_reading)
 
 	qdot=np.linalg.pinv(robot.jacobian(q_corner_top))@np.hstack((np.zeros(3),-ipad_pose[:3,-2]))		#motion direction
@@ -172,5 +173,5 @@ if R_temp[:,-1]@R_pencil[:,-1]>0:
 
 R_temp[:,1]=np.cross(R_temp[:,2],R_temp[:,0])
 
-# np.savetxt('config/ipad_pose.csv', H_from_RT(R_temp,center), delimiter=',')
+np.savetxt('config/test_ipad_pose.csv', H_from_RT(R_temp,center), delimiter=',')
 		

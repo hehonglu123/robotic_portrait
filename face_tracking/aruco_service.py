@@ -52,6 +52,8 @@ class ArucoDetector(object):
                                 [0,  0,  1]], dtype=np.float32)
         # distortion coefficients
         self.dist_coeffs = np.array([k1, k2, p1, p2, k3], dtype=np.float32)
+        print(self.camera_matrix)
+        print(self.dist_coeffs)
         # rate
         self.rate = 30
         
@@ -85,7 +87,7 @@ class ArucoDetector(object):
             # Draw the detected markers on the image
             cv2.aruco.drawDetectedMarkers(image, corners, ids)
             # Estimate the pose of the detected markers
-            rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(corners, 0.05, self.camera_matrix, self.dist_coeffs)
+            rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(corners, 0.091, self.camera_matrix, self.dist_coeffs)
             R_list=[]
             t_list=[]
             image_viz=None

@@ -199,6 +199,10 @@ def save_p_aruco(filename):
         aruco_cli = RRN.ConnectService(aruco_ser_url)
         aruco_pipe = aruco_cli.fiducials_sensor_data.Connect(-1)
     
+    while aruco_pipe.Available>=1:
+        aruco_pipe.ReceivePacket()
+    print("clean pipe:", aruco_pipe.Available)
+    
     euler_angle = []
     points = []
     st = time.time()
@@ -215,18 +219,18 @@ def save_p_aruco(filename):
                             data.fiducials.recognized_fiducials[i].pose.pose.pose[0]['orientation']['y'],
                             data.fiducials.recognized_fiducials[i].pose.pose.pose[0]['orientation']['z']])
             R = R2rpy(q2R(R))
+            # print(np.degrees(R))
             euler_angle.append(R)
             points.append(p)
     points = np.array(points)
-    euler_angle = np.array(euler_angle)
     center = np.mean(points, axis=0)
-    euler_angle = np.mean(euler_angle, axis=0)
-    R = rpy2R(euler_angle)
+    print(np.degrees(euler_angle)[:,0])
+    R = rpy2R(euler_angle[0])
     T_ipad_cam = Transform(R, center)
     T_cam_robot = robot_cam.fwd(vel_ctrl.joint_position())
     T_ipad_robot = T_cam_robot*T_ipad_cam
     R = T_ipad_robot.R
-    R = R@Rz(np.pi)
+    R = R@rot(np.array([0,0,1]), np.pi/2)
     center = T_ipad_robot.p
     print(R, center)
     np.savetxt('config/'+filename+'.csv', H_from_RT(R,center), delimiter=',')
