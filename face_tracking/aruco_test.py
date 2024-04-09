@@ -45,7 +45,7 @@ while KeyboardInterrupt:
 
     # Estimate the pose of the detected markers
     
-    rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(corners, 0.05, camera_matrix, dist_coeffs)
+    rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(corners, 0.091, camera_matrix, dist_coeffs)
 
     # Draw the pose axes on the image
     if rvecs is not None and tvecs is not None:

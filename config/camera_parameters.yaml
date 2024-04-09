@@ -1,6 +1,6 @@
 camera_matrix:
-  fx: 235.0
-  fy: 235.0
+  fx: 3097.67
+  fy: 3098.64
   cx: 539.5
   cy: 539.5
 distortion_coefficients:
