@@ -95,7 +95,7 @@ vel_ctrl.enable_velocity_mode()
 
 ###### for aruco tag calibration ####
 robot_cam = robot_obj(name_dict[args.robot_name],'config/'+name_dict[args.robot_name]+'_robot_default_config.yml',tool_file_path='config/camera.csv')
-aruco_ser_url='rr+tcp://localhost:59823?service=aruco_detector'
+aruco_ser_url='rr+tcp://localhost:2356?service=aruco_detector'
 marker_id = 'marker0'
 aruco_cli = None
 aruco_pipe = None
@@ -222,6 +222,13 @@ def save_p_aruco(filename):
     center = np.mean(points, axis=0)
     euler_angle = np.mean(euler_angle, axis=0)
     R = rpy2R(euler_angle)
+    T_ipad_cam = Transform(R, center)
+    T_cam_robot = robot_cam.fwd(vel_ctrl.joint_position())
+    T_ipad_robot = T_cam_robot*T_ipad_cam
+    R = T_ipad_robot.R
+    R = R@Rz(np.pi)
+    center = T_ipad_robot.p
+    print(R, center)
     np.savetxt('config/'+filename+'.csv', H_from_RT(R,center), delimiter=',')
     messagebox.showinfo('Message', 'pose saved')
 
@@ -303,7 +310,7 @@ gripper=Button(top,text='gripper off',command=lambda: gripper_ctrl(tool),bg='red
 
 save.bind('<ButtonPress-1>', lambda event: save_p(args.save_file))
 clear.bind('<ButtonPress-1>', lambda event: clear_p())
-use_aruco.bind('<ButtonPress-1>', lambda event: save_p_aruco('test_ipad_pose.csv'))
+use_aruco.bind('<ButtonPress-1>', lambda event: save_p_aruco('test_ipad_pose'))
 left.bind('<ButtonPress-1>', lambda event: move([0,20,0],np.eye(3)))
 right.bind('<ButtonPress-1>', lambda event: move([0,-20,0],np.eye(3)))
 forward.bind('<ButtonPress-1>', lambda event: move([20,0,0],np.eye(3)))
@@ -364,6 +371,7 @@ j6_p.bind('<ButtonRelease-1>', lambda event: stop())
 gripper.pack()
 save.pack()
 clear.pack()
+use_aruco.pack()
 left.pack(in_=top, side=LEFT)
 right.pack(in_=top, side=RIGHT)
 forward.pack(in_=top, side=LEFT)
