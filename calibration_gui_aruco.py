@@ -314,7 +314,7 @@ gripper=Button(top,text='gripper off',command=lambda: gripper_ctrl(tool),bg='red
 
 save.bind('<ButtonPress-1>', lambda event: save_p(args.save_file))
 clear.bind('<ButtonPress-1>', lambda event: clear_p())
-use_aruco.bind('<ButtonPress-1>', lambda event: save_p_aruco('test_ipad_pose'))
+use_aruco.bind('<ButtonPress-1>', lambda event: save_p_aruco(args.save_file))
 left.bind('<ButtonPress-1>', lambda event: move([0,20,0],np.eye(3)))
 right.bind('<ButtonPress-1>', lambda event: move([0,-20,0],np.eye(3)))
 forward.bind('<ButtonPress-1>', lambda event: move([20,0,0],np.eye(3)))

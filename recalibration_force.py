@@ -103,8 +103,8 @@ q_seed=np.zeros(6)
 # robot=robot_obj('ur5','config/ur5_robot_default_config.yml',tool_file_path='config/heh6_pen_ur.csv')
 # q_seed=np.radians([0,-54.8,110,-142,-90,0])
 
-# ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
-ipad_pose=np.loadtxt('config/test_ipad_pose.csv',delimiter=',')
+ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',')
+# ipad_pose=np.loadtxt('config/test_ipad_pose.csv',delimiter=',')
 paper_size=np.loadtxt('config/paper_size.csv',delimiter=',')
 R_pencil=ipad_pose[:3,:3]@Ry(np.pi)
 
@@ -173,5 +173,5 @@ if R_temp[:,-1]@R_pencil[:,-1]>0:
 
 R_temp[:,1]=np.cross(R_temp[:,2],R_temp[:,0])
 
-np.savetxt('config/test_ipad_pose.csv', H_from_RT(R_temp,center), delimiter=',')
+np.savetxt('config/ipad_pose.csv', H_from_RT(R_temp,center), delimiter=',')
 		

@@ -1,5 +1,6 @@
 import networkx as nx
 import matplotlib.pyplot as plt
+import numpy as np
 
 # Create an empty graph
 # G = nx.Graph()
@@ -26,6 +27,12 @@ G.add_edge((7,8), (5,6), weight=2)
 G.add_edge((7,8),(9,10), weight=1)
 G.add_edge((9,10),(7,8), weight=1)
 print(G)
+
+for edge in G.edges:
+    print(edge)
+    print(edge[0],edge[1])
+    print(np.array(edge[0])-np.array(edge[1]))
+
 # Draw the graph
 nx.draw(G, with_labels=True)
 plt.show()

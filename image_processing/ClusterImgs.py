@@ -256,10 +256,45 @@ def travel_pixel_skeletons(image,resize_ratio=2,max_radias=10,min_radias=2,min_s
     # find subgraphs
     subgraphs = [graph.subgraph(c).copy() for c in nx.connected_components(graph)]
     total_g=len(subgraphs)
+
+    ### check all subgraphs are small enough
+    while True:
+        subgraphs_split = []
+        small_flag = True
+        for subg in subgraphs:
+            if subg.number_of_nodes() > 2500 and subg.number_of_edges() > 4000:
+                print("Subgraph is too large") if SHOW_TSP else None
+                small_flag = False
+
+                node_y = [node[1] for node in subg.nodes]
+                
+                max_y = max(node_y)
+                min_y = min(node_y)
+                split_y = (max_y+min_y)/2
+                print("Split y: ",split_y) if SHOW_TSP else None
+                print('nodes: ',subg.number_of_nodes(),'edges: ',subg.number_of_edges()) if SHOW_TSP else None
+                for edge in subg.edges:
+                    if edge[0][1] > split_y and edge[1][1] <= split_y:
+                        subg.remove_edge(*edge)
+                    elif edge[1][1] > split_y and edge[0][1] <= split_y:
+                        subg.remove_edge(*edge)
+                subg.remove_nodes_from(list(nx.isolates(subg)))
+                subsubgraphs = [subg.subgraph(c).copy() for c in nx.connected_components(subg)]
+                subgraphs_split.extend(subsubgraphs)
+            else:
+                subgraphs_split.append(subg)
+        subgraphs = subgraphs_split
+        if small_flag:
+            break
+    
     print('Total subgraphs: ', total_g) if SHOW_TSP else None
     graph_count=1
     for subg in subgraphs:    
         print("graph: ",graph_count,"/",total_g," nodes: ",subg.number_of_nodes(), " edges: ", subg.number_of_edges()) if SHOW_TSP else None
+        if subg.number_of_nodes()<2 or subg.number_of_edges()<2:
+            print("Skip subgraph with less than 2 nodes") if SHOW_TSP else None
+            continue
+
         connetion_path = nx.approximation.traveling_salesman_problem(subg, cycle=True)
         connetion_path = list(connetion_path)
         if subg.number_of_nodes()>2:
