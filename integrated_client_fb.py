@@ -121,6 +121,7 @@ anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
 # exit()
 TEMP_DATA_DIR = 'temp_data/'
 # TEMP_DATA_DIR = 'imgs/'
+test_logo='logos_words'
 
 TAKE_FACE_IMAGE = False
 FACE_PORTRAIT = True
