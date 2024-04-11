@@ -3,6 +3,7 @@ import time, traceback, sys, cv2
 import numpy as np
 import pickle
 import glob
+import threading
 sys.path.append('toolbox')
 from robot_def import *
 from lambda_calc import *
@@ -227,6 +228,16 @@ while True:
     # cv2.imshow('img',img)
     # cv2.waitKey(0)
     ############################################################
+    
+    def robot_thinking():
+        print('Robot thinking')
+        while t_robot_thinking_flag:
+            pass
+        print('Robot ready')
+    
+    t_robot_think = threading.Thread(target=robot_thinking)
+    t_robot_thinking_flag = True
+    t_robot_think.start()
 
     ########################## portrait FaceSegmentation/GAN ##############################
     ## Face Segmentation
@@ -283,6 +294,10 @@ while True:
     else:
         js_paths = pickle.load(open(TEMP_DATA_DIR+'js_paths.pkl', 'rb'))
     print("PLANNING TIME: ", time.time()-planning_st)
+    
+    ## robot thinking movement end
+    t_robot_thinking_flag = False
+    t_robot_think.join()
 
     ####################################EXECUTION#####################################################
     execution_st = time.time()

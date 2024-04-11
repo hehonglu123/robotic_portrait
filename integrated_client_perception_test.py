@@ -155,13 +155,13 @@ while True:
         for n in stroke:
             image_out = cv2.circle(image_out, (int(n[0]), int(n[1])), round(n[2]), 0, -1)
             image_out[int(n[1]),int(n[0])]=120
-            cv2.imshow("Image", image_out)
+            cv2.imshow("Image", cv2.resize(image_out,(image_out.shape[1]//2,image_out.shape[0]//2)))
             if cv2.waitKey(1) == ord('q'): 
                 # press q to terminate the loop 
                 cv2.destroyAllWindows() 
                 break 
         input("Next stroke? (Press Enter)")
-    cv2.imshow("Image", image_out)
+    cv2.imshow("Image", cv2.resize(image_out,(image_out.shape[1]//2,image_out.shape[0]//2)))
     cv2.waitKey(0)
     
     ####### write words
