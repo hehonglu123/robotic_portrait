@@ -1,6 +1,7 @@
 from RobotRaconteur.Client import *     #import RR client library
 import time, traceback, sys, cv2
 import numpy as np
+from general_robotics_toolbox import * #import general robot toolbox
 import pickle
 import glob
 import threading
@@ -79,6 +80,8 @@ H_pentip2ati=np.loadtxt('config/pentip2ati.csv',delimiter=',') # FT sensor info
 p_button=np.array([141, -82, 0]) # button position, in ipad frame
 R_pencil=Ry(np.pi) # pencil orientation, ipad frame
 R_pencil_base=ipad_pose[:3,:3]@R_pencil # pencil orientation, world frame
+q_waiting = np.radians([0,-30,25,0,40,0]) # waiting joint position
+T_waiting = Transform(p_tracking_start,R_tracking_start) # waiting pose, world frame
 hover_height=20 # height to hover above the paper
 face_track_speed=0.8 # speed to track face
 face_track_x = np.array([-np.sin(np.arctan2(p_tracking_start[1],p_tracking_start[0])),np.cos(np.arctan2(p_tracking_start[1],p_tracking_start[0])),0])
@@ -232,7 +235,69 @@ while True:
     def robot_thinking():
         print('Robot thinking')
         while t_robot_thinking_flag:
-            pass
+            # back to waiting position
+            mctrl.jog_joint_position_cmd(q_waiting,v=controller_params['jogging_speed'])
+            z_height = 300 # z height of the motion
+            # random choose one type of motion from four
+            motion_type = np.random.randint(0,4)
+            if motion_type == 0: # random circle motion
+                # random choose a radius
+                radius = np.random.uniform(20,np.min(paper_size)/2-0.01)
+                # random choose a center such that the circle is within the paper
+                center = np.random.uniform(radius,np.min(paper_size)-radius,2)
+                center = center-np.array(paper_size)/2
+                # sample N points on the circle
+                angle_sample = np.linspace(0,2*np.pi,100)
+                circle_sample = np.array([radius*np.cos(angle_sample),radius*np.sin(angle_sample),z_height]).T+np.append(center,0)
+                circle_sample = np.vstack((circle_sample,circle_sample))[np.random.randint(0,100):np.random.randint(0,100)+100]
+                curve_sample = circle_sample[::np.random.choice([1,-1])]
+                motion_speed = np.random.uniform(20,30)
+            elif motion_type == 1: # random bezier curve motion
+                # random choose three points
+                points = np.random.uniform([0,0],paper_size,[3,2])
+                points = points-np.array(paper_size)/2
+                points = np.hstack((points,np.array([z_height,z_height,z_height]).reshape(-1,1)))
+                # sample N points on the curve
+                t_sample = np.linspace(0,1,100)
+                curve_sample = points[1] + np.reshape(((1-t_sample)**2),(-1,1))*(points[0]-points[1]) + np.reshape((t_sample**2),(-1,1))*(points[2]-points[1])
+                motion_speed = np.random.uniform(20,30)
+            elif motion_type == 2: # random oscillation motion
+                # random choose two points
+                points = np.random.uniform([0,0],paper_size-10,[2,2])
+                points = points-np.array(paper_size)/2
+                points = np.hstack((points,np.array([z_height,z_height]).reshape(-1,1)))
+                normal_direrction = (points[1]-points[0])/np.linalg.norm(points[1]-points[0])
+                directions = [-1,1]
+                # sample N points on the curve
+                N_points = np.random.randint(30,100)
+                t_sample = np.linspace(0,1,N_points)
+                curve_sample = []
+                for i in range(N_points):
+                    curve_sample.append(points[0]*(1-t_sample[i])+points[1]*t_sample[i]+normal_direrction*np.random.uniform(0,10,1)*directions[i%2])
+                motion_speed = np.random.uniform(15,22)
+            elif motion_type == 3: # random traveling points
+                # random choose N points
+                curve_sample = np.random.uniform([0,0],paper_size,[np.random.randint(3,10),2])
+                curve_sample = np.hstack((curve_sample,np.ones((curve_sample.shape[0],1))*z_height))
+                motion_speed = np.random.uniform(20,30)
+                
+            # convert to world frame
+            curve_sample_base = (ipad_pose[:3,:3]@curve_sample.T).T + ipad_pose[:3,-1]
+            if t_robot_thinking_flag == False:
+                break
+            # solve joint trajectory
+            curve_js=robot.find_curve_js(curve_sample_base,[R_pencil_base]*len(curve_sample_base),q_seed)
+            # send to robot
+            if t_robot_thinking_flag == False:
+                break
+            mctrl.jog_joint_position_cmd(curve_js[0],v=controller_params['jogging_speed'])
+            if t_robot_thinking_flag == False:
+                break
+            mctrl.trajectory_position_cmd(curve_js,v=motion_speed)
+            if t_robot_thinking_flag == False:
+                break
+            mctrl.jog_joint_position_cmd(q_waiting,v=controller_params['jogging_speed'])
+
         print('Robot ready')
     
     t_robot_think = threading.Thread(target=robot_thinking)

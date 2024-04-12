@@ -31,7 +31,7 @@ def adjoint_map(T):
 
 class MotionController(object):
     def __init__(self,robot,ipad_pose,H_pentip2ati,controller_param,TIMESTEP,USE_RR_ROBOT=True,
-                 RR_robot_sub=None,FORCE_PROTECTION=5,RR_ati_cli=None):
+                 RR_robot_sub=None,FORCE_PROTECTION=5,RR_ati_cli=None,simulation=False):
         
         # define robots
         self.robot=robot
@@ -49,7 +49,7 @@ class MotionController(object):
         # Force protection. Units: N
         self.FORCE_PROTECTION = FORCE_PROTECTION
 
-        if RR_ati_cli is not None:
+        if RR_ati_cli is not None and not simulation:
             #################### FT Connection ####################
             self.RR_ati_cli=RR_ati_cli
             #Connect a wire connection
@@ -60,29 +60,31 @@ class MotionController(object):
         ################ Robot Connection ################
         self.USE_RR_ROBOT=USE_RR_ROBOT
         self.command_seqno = 1
-        if self.USE_RR_ROBOT and RR_robot_sub is not None:
-            ##RR PARAMETERS
-            self.RR_robot_sub=RR_robot_sub
-            # RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
-            self.RR_robot=self.RR_robot_sub.GetDefaultClientWait(1)
-            self.robot_state = self.RR_robot_sub.SubscribeWire("robot_state")
-            time.sleep(0.1)
-            robot_const = RRN.GetConstants("com.robotraconteur.robotics.robot", self.RR_robot)
-            self.halt_mode = robot_const["RobotCommandMode"]["halt"]
-            self.position_mode = robot_const["RobotCommandMode"]["position_command"]
-            self.RobotJointCommand = RRN.GetStructureType("com.robotraconteur.robotics.robot.RobotJointCommand",self.RR_robot)
-            self.RR_robot.command_mode = self.halt_mode
-            time.sleep(0.1)
-            self.connect_position_mode()
-        else: # use EGM else
-            self.egm = EGM()
+        if not simulation:
+            if self.USE_RR_ROBOT and RR_robot_sub is not None:
+                ##RR PARAMETERS
+                self.RR_robot_sub=RR_robot_sub
+                # RR_robot_sub=RRN.SubscribeService('rr+tcp://localhost:58655?service=robot')
+                self.RR_robot=self.RR_robot_sub.GetDefaultClientWait(1)
+                self.robot_state = self.RR_robot_sub.SubscribeWire("robot_state")
+                time.sleep(0.1)
+                robot_const = RRN.GetConstants("com.robotraconteur.robotics.robot", self.RR_robot)
+                self.halt_mode = robot_const["RobotCommandMode"]["halt"]
+                self.position_mode = robot_const["RobotCommandMode"]["position_command"]
+                self.RobotJointCommand = RRN.GetStructureType("com.robotraconteur.robotics.robot.RobotJointCommand",self.RR_robot)
+                self.RR_robot.command_mode = self.halt_mode
+                time.sleep(0.1)
+                self.connect_position_mode()
+            else: # use EGM else
+                self.egm = EGM()
   
         self.TIMESTEP = TIMESTEP # egm timestep 4 ms, ur5 10 ms
         self.params['lookahead_index'] = int(self.params['lookahead_time']/self.TIMESTEP)
 
         self.ft_reading = None
-        while self.ft_reading is None:
-            time.sleep(0.1)
+        if not simulation:
+            while self.ft_reading is None:
+                time.sleep(0.1)
         print("Motion controller initialized")
         
     def connect_position_mode(self):

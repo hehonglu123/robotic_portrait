@@ -36,6 +36,7 @@ if ROBOT_NAME=='ABB_1200_5_90':
     q_seed=np.zeros(6)
     q_tracking_start=robot_cam.inv(p_tracking_start,R_tracking_start@rot(np.array([0,0,1]),-np.pi/2),q_seed)[0]	###initial joint position
     image_center=np.array([1080,1080])/2	###image center
+    TIMESTEP=0.004
 elif ROBOT_NAME=='ur5':
     #########################################################UR config parameters#########################################################
     robot_cam=robot_obj(ROBOT_NAME,'config/ur5_robot_default_config.yml',tool_file_path='config/camera_ur.csv')
@@ -61,7 +62,29 @@ ipad_pose=np.loadtxt('config/ipad_pose.csv',delimiter=',') # ipad pose
 H_pentip2ati=np.loadtxt('config/pentip2ati.csv',delimiter=',') # FT sensor info
 p_button=np.array([131, -92, 0]) # button position
 R_pencil=ipad_pose[:3,:3]@Ry(np.pi) # pencil orientation
+q_waiting = np.radians([0,-25,25,0,40,0]) # waiting joint position
+T_waiting = robot.fwd(q_waiting) # waiting pose, world frame
 target_size=[1200,800]
+smallest_lam=20
+pixelforce_ratio_calib=1.2
+######## Controller parameters ###
+controller_params = {
+    "force_ctrl_damping": 180.0, # 200, 180, 90, 60
+    "force_epsilon": 0.1, # Unit: N
+    "moveL_speed_lin": 10.0, # 10 Unit: mm/sec
+    "moveL_acc_lin": 0.6, # Unit: mm/sec^2
+    "moveL_speed_ang": np.radians(10), # Unit: rad/sec
+    "trapzoid_slope": 1, # trapzoidal load profile. Unit: N/sec
+    "load_speed": 10.0, # Unit mm/sec
+    "unload_speed": 1.0, # Unit mm/sec
+    'settling_time': 1, # Unit: sec
+    "lookahead_time": 0.02, # Unit: sec
+    "jogging_speed": 100, # Unit: mm/sec
+    "jogging_acc": 25, # Unit: mm/sec^2
+    'force_filter_alpha': 0.99 # force low pass filter alpha
+    }
+### Define the motion controller
+mctrl=MotionController(robot,ipad_pose,H_pentip2ati,controller_params,TIMESTEP,USE_RR_ROBOT=False,simulation=True)
 
 ### Portrait NNs ###
 faceseg = FaceSegmentation()
@@ -150,6 +173,29 @@ while True:
     ####################################################################
     print('TOTAL TIME: ', time.time()-img_st)
     
+    ### simulated Execute
+    try:
+        for i in range(0,num_segments):
+            if len(js_paths[i])<=1:
+                continue
+            cartesian_path_world = cartesian_paths_world[i]
+            force_path = force_paths[i]
+            curve_xyz = np.dot(mctrl.ipad_pose_inv[:3,:3],cartesian_path_world.T).T+np.tile(mctrl.ipad_pose_inv[:3,-1],(len(cartesian_path_world),1))
+            curve_xy = curve_xyz[:,:2] # get xy curve
+            fz_des = force_path*(-1) # transform to tip desired
+            fz_des = fz_des*pixelforce_ratio_calib
+            lam = calc_lam_js(js_paths[i],mctrl.robot) # get path length
+            if lam[-1] < smallest_lam:
+                continue
+            traj_q, traj_xy, traj_fz, time_bp = mctrl.trajectory_generate(js_paths[i],curve_xy,fz_des) # get trajectory and time_bp
+            #### motion start ###
+            mctrl.motion_start_routine(traj_q[0],traj_fz[0],hover_height,2,lin_vel=controller_params['jogging_speed'])
+            joint_force_exe, cart_force_exe = mctrl.trajectory_force_PIDcontrol(traj_xy,traj_q,traj_fz,force_lookahead=True)
+            mctrl.motion_end_routine(traj_q[-1],hover_height, lin_vel=controller_params['jogging_speed'])
+    except KeyboardInterrupt:
+        print('INTERRUPTED')
+        mctrl.motion_end_routine(traj_q[-1],hover_height*4, lin_vel=controller_params['jogging_speed'])
+    
     image_out = np.ones_like(image_thresh)*255
     for stroke in pixel_paths:
         for n in stroke:
@@ -164,7 +210,7 @@ while True:
     cv2.imshow("Image", cv2.resize(image_out,(image_out.shape[1]//2,image_out.shape[0]//2)))
     cv2.waitKey(0)
     
-    ####### write words
+    ####################### write words ############################
     num_segments=len(glob.glob('path/pixel_path/'+test_logo+'/*.csv'))
     img=cv2.imread('imgs/'+test_logo+'_resized.png')
     # replocate the image
