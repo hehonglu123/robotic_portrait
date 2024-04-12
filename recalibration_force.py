@@ -148,12 +148,10 @@ for corner in corners:
 		ft_tip = ad_ati2pentip_T@ft_reading
 		fz_now = float(ft_tip[-1])
 		ft_tip_norm = np.linalg.norm(ft_tip[3:])
-		print(fz_now,ft_tip_norm)
 		f_cur = fz_now*-1
 		# f_cur = ft_tip_norm
-		print(ft_reading,f_cur)
 		time.sleep(0.004)
-	
+	print(ft_reading,f_cur)
 	corners_adjusted.append(robot.fwd(q_cur).p)
 
 	jog_joint_position_cmd(q_corner_top_safe,v=0.2)

@@ -81,7 +81,7 @@ p_button=np.array([141, -82, 0]) # button position, in ipad frame
 R_pencil=Ry(np.pi) # pencil orientation, ipad frame
 R_pencil_base=ipad_pose[:3,:3]@R_pencil # pencil orientation, world frame
 q_waiting = np.radians([0,-30,25,0,40,0]) # waiting joint position
-T_waiting = Transform(p_tracking_start,R_tracking_start) # waiting pose, world frame
+T_waiting = robot.fwd(q_waiting) # waiting pose, world frame
 hover_height=20 # height to hover above the paper
 face_track_speed=0.8 # speed to track face
 face_track_x = np.array([-np.sin(np.arctan2(p_tracking_start[1],p_tracking_start[0])),np.cos(np.arctan2(p_tracking_start[1],p_tracking_start[0])),0])
@@ -139,12 +139,12 @@ q_init = mctrl.read_position()
 while True:
     start_time=time.time()
     #jog to initial_position
-    mctrl.jog_joint_position_cmd(q_tracking_start,v=controller_params['jogging_speed'],wait_time=0.5)
+    # mctrl.jog_joint_position_cmd(q_tracking_start,v=controller_params['jogging_speed'],wait_time=0.5)
     # mctrl.trajectory_position_cmd([q_init,q_tracking_start],v=controller_params['jogging_speed'])
 
     ## Next round activatoion
     input("Press Enter to start next round")
-    mctrl.press_button_routine(p_button,R_pencil,h_offset=hover_height,lin_vel=controller_params['jogging_speed'], q_seed=q_seed)
+    # mctrl.press_button_routine(p_button,R_pencil,h_offset=hover_height,lin_vel=controller_params['jogging_speed'], q_seed=q_seed)
 
     ###################### Face tracking ######################
     if TAKE_FACE_IMAGE:
@@ -225,7 +225,7 @@ while True:
         plt.show()
 
     print("PAGE FLIPPING")
-    mctrl.press_button_routine(p_button,R_pencil,h_offset=hover_height,lin_vel=controller_params['jogging_speed'], q_seed=q_seed)
+    # mctrl.press_button_routine(p_button,R_pencil,h_offset=hover_height,lin_vel=controller_params['jogging_speed'], q_seed=q_seed)
 
     img_st = time.time()
     # cv2.imshow('img',img)
@@ -237,9 +237,11 @@ while True:
         while t_robot_thinking_flag:
             # back to waiting position
             mctrl.jog_joint_position_cmd(q_waiting,v=controller_params['jogging_speed'])
-            z_height = 300 # z height of the motion
+            z_height = 30 # z height of the motion
             # random choose one type of motion from four
             motion_type = np.random.randint(0,4)
+            motion_type = 0
+            print("Motion type:",motion_type)
             if motion_type == 0: # random circle motion
                 # random choose a radius
                 radius = np.random.uniform(20,np.min(paper_size)/2-0.01)
@@ -248,7 +250,7 @@ while True:
                 center = center-np.array(paper_size)/2
                 # sample N points on the circle
                 angle_sample = np.linspace(0,2*np.pi,100)
-                circle_sample = np.array([radius*np.cos(angle_sample),radius*np.sin(angle_sample),z_height]).T+np.append(center,0)
+                circle_sample = np.array([radius*np.cos(angle_sample),radius*np.sin(angle_sample),np.ones(100)*z_height]).T+np.append(center,0)
                 circle_sample = np.vstack((circle_sample,circle_sample))[np.random.randint(0,100):np.random.randint(0,100)+100]
                 curve_sample = circle_sample[::np.random.choice([1,-1])]
                 motion_speed = np.random.uniform(20,30)
@@ -280,7 +282,15 @@ while True:
                 curve_sample = np.random.uniform([0,0],paper_size,[np.random.randint(3,10),2])
                 curve_sample = np.hstack((curve_sample,np.ones((curve_sample.shape[0],1))*z_height))
                 motion_speed = np.random.uniform(20,30)
-                
+            
+            # fig = plt.figure()
+            # ax = fig.add_subplot(111, projection='3d')
+            # ax.plot(curve_sample[:,0],curve_sample[:,1],curve_sample[:,2])
+            # ax.set_xlabel('X Label')
+            # ax.set_ylabel('Y Label')
+            # ax.set_zlabel('Z Label')
+            # plt.show()
+
             # convert to world frame
             curve_sample_base = (ipad_pose[:3,:3]@curve_sample.T).T + ipad_pose[:3,-1]
             if t_robot_thinking_flag == False:
@@ -290,19 +300,15 @@ while True:
             # send to robot
             if t_robot_thinking_flag == False:
                 break
-            mctrl.jog_joint_position_cmd(curve_js[0],v=controller_params['jogging_speed'])
+            mctrl.jog_joint_position_cmd_nowait(curve_js[0],v=controller_params['jogging_speed'])
             if t_robot_thinking_flag == False:
                 break
-            mctrl.trajectory_position_cmd(curve_js,v=motion_speed)
+            mctrl.trajectory_position_cmd_nowait(curve_js,v=motion_speed)
             if t_robot_thinking_flag == False:
                 break
-            mctrl.jog_joint_position_cmd(q_waiting,v=controller_params['jogging_speed'])
+            mctrl.jog_joint_position_cmd_nowait(q_waiting,v=controller_params['jogging_speed'])
 
         print('Robot ready')
-    
-    t_robot_think = threading.Thread(target=robot_thinking)
-    t_robot_thinking_flag = True
-    t_robot_think.start()
 
     ########################## portrait FaceSegmentation/GAN ##############################
     ## Face Segmentation
@@ -359,10 +365,6 @@ while True:
     else:
         js_paths = pickle.load(open(TEMP_DATA_DIR+'js_paths.pkl', 'rb'))
     print("PLANNING TIME: ", time.time()-planning_st)
-    
-    ## robot thinking movement end
-    t_robot_thinking_flag = False
-    t_robot_think.join()
 
     ####################################EXECUTION#####################################################
     execution_st = time.time()

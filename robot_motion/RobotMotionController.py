@@ -432,6 +432,28 @@ class MotionController(object):
             self.read_position()
             self.position_cmd(q)
     
+    def jog_joint_position_cmd_nowait(self,q,v=0.4,wait_time=0):
+
+        q_start=self.read_position()
+        # total_time=np.linalg.norm(q-q_start)/v
+
+        q_all = np.linspace(q_start,q,num=100)
+        # print(q_all[:10])
+        # print(q_all[-10:])
+        # exit()
+        # q_all = np.vstack((q_start,q))
+        traj_q, traj_xy, traj_fz, time_bp=self.trajectory_generate(q_all,np.zeros(len(q_all)),np.zeros(len(q_all)),lin_vel=v,lin_acc=self.params["jogging_acc"])
+
+        for i in range(len(traj_q)):
+            self.position_cmd(traj_q[i])
+            time.sleep(self.TIMESTEP)
+            
+        ###additional points for accuracy
+        start_time=time.time()
+        while time.time()-start_time<wait_time:
+            self.position_cmd(q)
+            time.sleep(self.TIMESTEP)
+    
     def trajectory_position_cmd(self,q_all,v=0.4):
 
         if len(q_all)<100:
@@ -449,3 +471,20 @@ class MotionController(object):
             self.position_cmd(traj_q[i])
             if self.USE_RR_ROBOT:
                 time.sleep(self.TIMESTEP)
+    
+    def trajectory_position_cmd_nowait(self,q_all,v=0.4):
+
+        if len(q_all)<100:
+            iter_num = int(100/(len(q_all)-1))
+            q_smooth_all=[]
+            for qi in range(len(q_all)-1):
+                q_smooth_all.extend(np.linspace(q_all[qi],q_all[qi+1],num=iter_num,endpoint=False))
+            q_smooth_all.append(q_all[-1])
+            q_all=q_smooth_all
+
+        traj_q, traj_xy, traj_fz, time_bp=self.trajectory_generate(q_all,np.zeros(len(q_all)),np.zeros(len(q_all)),lin_vel=v,lin_acc=self.params["jogging_acc"])
+
+        for i in range(len(traj_q)):
+            # self.read_position()
+            self.position_cmd(traj_q[i])
+            time.sleep(self.TIMESTEP)
