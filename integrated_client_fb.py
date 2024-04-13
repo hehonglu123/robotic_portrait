@@ -101,8 +101,8 @@ controller_params = {
     "unload_speed": 1.0, # Unit mm/sec
     'settling_time': 1, # Unit: sec
     "lookahead_time": 0.02, # Unit: sec
-    "jogging_speed": 100, # Unit: mm/sec
-    "jogging_acc": 25, # Unit: mm/sec^2
+    "jogging_speed": 150, # Unit: mm/sec
+    "jogging_acc": 30, # Unit: mm/sec^2
     'force_filter_alpha': 0.99 # force low pass filter alpha
     }
 ### Define the motion controller
@@ -128,23 +128,119 @@ TEMP_DATA_DIR = 'temp_data/'
 # TEMP_DATA_DIR = 'imgs/'
 test_logo='logos_words'
 
-TAKE_FACE_IMAGE = False
+TAKE_FACE_IMAGE = True
 FACE_PORTRAIT = True
 PIXEL_PLAN = True
 CART_PLAN = True
 JS_PLAN = True
 
+img_names = ['alex','brandon','eric','glenn','julia','molly','thea','wen']
+img_count = 0
+
 q_init = mctrl.read_position()
 #########################################################EXECUTION#########################################################
 while True:
     start_time=time.time()
-    #jog to initial_position
-    # mctrl.jog_joint_position_cmd(q_tracking_start,v=controller_params['jogging_speed'],wait_time=0.5)
-    # mctrl.trajectory_position_cmd([q_init,q_tracking_start],v=controller_params['jogging_speed'])
+    
 
-    ## Next round activatoion
-    input("Press Enter to start next round")
-    # mctrl.press_button_routine(p_button,R_pencil,h_offset=hover_height,lin_vel=controller_params['jogging_speed'], q_seed=q_seed)
+    def robot_thinking():
+        print('Robot thinking')
+        origin_jogging_speed = controller_params['jogging_speed']
+        origin_johging_acc = controller_params['jogging_acc']
+        controller_params['jogging_speed'] = 300
+        controller_params['jogging_acc'] = 100
+        count=3
+        while t_robot_thinking_flag:
+            # back to waiting position
+            mctrl.jog_joint_position_cmd(q_waiting,v=controller_params['jogging_speed'])
+            try:    
+                z_height = 30 # z height of the motion
+                # random choose one type of motion from four
+                motion_type = np.random.randint(0,3)
+                print("Motion type:",motion_type)
+                if motion_type == 0: # random circle motion
+                    # random choose a radius
+                    radius = np.random.uniform(20,np.min(paper_size)/2-0.01)
+                    # random choose a center such that the circle is within the paper
+                    center = np.random.uniform(radius,np.min(paper_size)-radius,2)
+                    center = center-np.array(paper_size)/2
+                    # sample N points on the circle
+                    angle_sample = np.linspace(0,2*np.pi,100)
+                    circle_sample = np.array([radius*np.cos(angle_sample),radius*np.sin(angle_sample),np.ones(100)*z_height]).T+np.append(center,0)
+                    circle_sample = np.vstack((circle_sample,circle_sample))[np.random.randint(0,100):np.random.randint(0,100)+100]
+                    curve_sample = circle_sample[::np.random.choice([1,-1])]
+                    motion_speed = np.random.uniform(20,30)
+                elif motion_type == 1: # random bezier curve motion
+                    # random choose three points
+                    points = np.random.uniform([0,0],paper_size,[3,2])
+                    points = points-np.array(paper_size)/2
+                    points = np.hstack((points,np.array([z_height,z_height,z_height]).reshape(-1,1)))
+                    # sample N points on the curve
+                    t_sample = np.linspace(0,1,100)
+                    curve_sample = points[1] + np.reshape(((1-t_sample)**2),(-1,1))*(points[0]-points[1]) + np.reshape((t_sample**2),(-1,1))*(points[2]-points[1])
+                    motion_speed = np.random.uniform(20,30)
+                elif motion_type == 2: # random oscillation motion
+                    # random choose two points
+                    points = np.random.uniform([0,0],paper_size-10,[2,2])
+                    points = points-np.array(paper_size)/2
+                    points = np.hstack((points,np.array([z_height,z_height]).reshape(-1,1)))
+                    normal_direrction = (points[1]-points[0])/np.linalg.norm(points[1]-points[0])
+                    normal_direrction = rot(np.array([0,0,1]),np.pi/2)@normal_direrction
+                    directions = [-1,1]
+                    # sample N points on the curve
+                    N_points = np.random.randint(30,100)
+                    t_sample = np.linspace(0,1,N_points)
+                    curve_sample = []
+                    for i in range(N_points):
+                        curve_sample.append(points[0]*(1-t_sample[i])+points[1]*t_sample[i]+normal_direrction*np.random.uniform(0,10,1)*directions[i%2])
+                    curve_sample = np.array(curve_sample)
+                    motion_speed = np.random.uniform(15,22)
+                elif motion_type == 3: # random traveling points
+                    # random choose N points
+                    curve_sample = np.random.uniform([10,10],paper_size-10,[np.random.randint(3,10),2])
+                    curve_sample = curve_sample-np.array(paper_size)/2
+                    curve_sample = np.hstack((curve_sample,np.ones((curve_sample.shape[0],1))*z_height))
+                    motion_speed = np.random.uniform(20,30)
+
+                # convert to world frame
+                curve_sample_base = (ipad_pose[:3,:3]@curve_sample.T).T + ipad_pose[:3,-1]
+                if t_robot_thinking_flag == False:
+                    break
+                # solve joint trajectory
+                curve_js=robot.find_curve_js(curve_sample_base,[R_pencil_base]*len(curve_sample_base),q_seed)
+                # send to robot
+                if t_robot_thinking_flag == False:
+                    break
+                mctrl.jog_joint_position_cmd(curve_js[0],v=controller_params['jogging_speed'])
+                if t_robot_thinking_flag == False:
+                    break
+                mctrl.trajectory_position_cmd(curve_js,v=motion_speed,wait_time=0.25)
+                if t_robot_thinking_flag == False:
+                    break
+                mctrl.jog_joint_position_cmd(q_waiting,v=controller_params['jogging_speed'],wait_time=0.5)
+            except:
+                traceback.print_exc()
+                print('Robot thinking error')
+                continue
+
+            count+=1
+
+        controller_params['jogging_speed'] = origin_jogging_speed
+        controller_params['jogging_acc'] = origin_johging_acc
+        print('Robot ready')
+
+    # # start robot thinking while waiting for user input
+    # t_robot_thinking_flag = True
+    # t_robot_thinking = threading.Thread(target=robot_thinking)
+    # t_robot_thinking.start()
+    # ## Next round activatoion
+    # input("Press Enter to start next round")
+    # # stop robot thinking
+    # t_robot_thinking_flag = False
+    # t_robot_thinking.join()
+
+    #jog to initial_position
+    mctrl.jog_joint_position_cmd(q_tracking_start,v=controller_params['jogging_speed'],wait_time=0.5)
 
     ###################### Face tracking ######################
     if TAKE_FACE_IMAGE:
@@ -220,95 +316,20 @@ while True:
         print('IMAGE TAKEN')
         cv2.imwrite(TEMP_DATA_DIR+'img.jpg',img)
     else:
-        img = cv2.imread(TEMP_DATA_DIR+'img_molly.jpg')
+        img = cv2.imread(TEMP_DATA_DIR+'img.jpg')
         plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
         plt.show()
+        # img = cv2.imread(TEMP_DATA_DIR+'img_'+img_names[img_count%len(img_names)]+'.jpg')
+        # print("Drawing image: ", img_names[img_count%len(img_names)])
+        # img_count+=1
 
     print("PAGE FLIPPING")
-    # mctrl.press_button_routine(p_button,R_pencil,h_offset=hover_height,lin_vel=controller_params['jogging_speed'], q_seed=q_seed)
+    mctrl.press_button_routine(p_button,R_pencil,h_offset=hover_height,lin_vel=controller_params['jogging_speed'], q_seed=q_seed)
 
     img_st = time.time()
     # cv2.imshow('img',img)
     # cv2.waitKey(0)
     ############################################################
-    
-    def robot_thinking():
-        print('Robot thinking')
-        while t_robot_thinking_flag:
-            # back to waiting position
-            mctrl.jog_joint_position_cmd(q_waiting,v=controller_params['jogging_speed'])
-            z_height = 30 # z height of the motion
-            # random choose one type of motion from four
-            motion_type = np.random.randint(0,4)
-            motion_type = 0
-            print("Motion type:",motion_type)
-            if motion_type == 0: # random circle motion
-                # random choose a radius
-                radius = np.random.uniform(20,np.min(paper_size)/2-0.01)
-                # random choose a center such that the circle is within the paper
-                center = np.random.uniform(radius,np.min(paper_size)-radius,2)
-                center = center-np.array(paper_size)/2
-                # sample N points on the circle
-                angle_sample = np.linspace(0,2*np.pi,100)
-                circle_sample = np.array([radius*np.cos(angle_sample),radius*np.sin(angle_sample),np.ones(100)*z_height]).T+np.append(center,0)
-                circle_sample = np.vstack((circle_sample,circle_sample))[np.random.randint(0,100):np.random.randint(0,100)+100]
-                curve_sample = circle_sample[::np.random.choice([1,-1])]
-                motion_speed = np.random.uniform(20,30)
-            elif motion_type == 1: # random bezier curve motion
-                # random choose three points
-                points = np.random.uniform([0,0],paper_size,[3,2])
-                points = points-np.array(paper_size)/2
-                points = np.hstack((points,np.array([z_height,z_height,z_height]).reshape(-1,1)))
-                # sample N points on the curve
-                t_sample = np.linspace(0,1,100)
-                curve_sample = points[1] + np.reshape(((1-t_sample)**2),(-1,1))*(points[0]-points[1]) + np.reshape((t_sample**2),(-1,1))*(points[2]-points[1])
-                motion_speed = np.random.uniform(20,30)
-            elif motion_type == 2: # random oscillation motion
-                # random choose two points
-                points = np.random.uniform([0,0],paper_size-10,[2,2])
-                points = points-np.array(paper_size)/2
-                points = np.hstack((points,np.array([z_height,z_height]).reshape(-1,1)))
-                normal_direrction = (points[1]-points[0])/np.linalg.norm(points[1]-points[0])
-                directions = [-1,1]
-                # sample N points on the curve
-                N_points = np.random.randint(30,100)
-                t_sample = np.linspace(0,1,N_points)
-                curve_sample = []
-                for i in range(N_points):
-                    curve_sample.append(points[0]*(1-t_sample[i])+points[1]*t_sample[i]+normal_direrction*np.random.uniform(0,10,1)*directions[i%2])
-                motion_speed = np.random.uniform(15,22)
-            elif motion_type == 3: # random traveling points
-                # random choose N points
-                curve_sample = np.random.uniform([0,0],paper_size,[np.random.randint(3,10),2])
-                curve_sample = np.hstack((curve_sample,np.ones((curve_sample.shape[0],1))*z_height))
-                motion_speed = np.random.uniform(20,30)
-            
-            # fig = plt.figure()
-            # ax = fig.add_subplot(111, projection='3d')
-            # ax.plot(curve_sample[:,0],curve_sample[:,1],curve_sample[:,2])
-            # ax.set_xlabel('X Label')
-            # ax.set_ylabel('Y Label')
-            # ax.set_zlabel('Z Label')
-            # plt.show()
-
-            # convert to world frame
-            curve_sample_base = (ipad_pose[:3,:3]@curve_sample.T).T + ipad_pose[:3,-1]
-            if t_robot_thinking_flag == False:
-                break
-            # solve joint trajectory
-            curve_js=robot.find_curve_js(curve_sample_base,[R_pencil_base]*len(curve_sample_base),q_seed)
-            # send to robot
-            if t_robot_thinking_flag == False:
-                break
-            mctrl.jog_joint_position_cmd_nowait(curve_js[0],v=controller_params['jogging_speed'])
-            if t_robot_thinking_flag == False:
-                break
-            mctrl.trajectory_position_cmd_nowait(curve_js,v=motion_speed)
-            if t_robot_thinking_flag == False:
-                break
-            mctrl.jog_joint_position_cmd_nowait(q_waiting,v=controller_params['jogging_speed'])
-
-        print('Robot ready')
 
     ########################## portrait FaceSegmentation/GAN ##############################
     ## Face Segmentation
@@ -405,43 +426,36 @@ while True:
     
     ########### Logo words ###########
     ####### write words
-    try:
-        img = cv2.imread(TEMP_DATA_DIR+'img_logo.png')
-        pixel_paths = pickle.load(open(TEMP_DATA_DIR+'pixel_paths_logo.pkl', 'rb'))
-        cartesian_paths_world = pickle.load(open(TEMP_DATA_DIR+'cartesian_paths_world_logo.pkl', 'rb'))
-        js_paths = pickle.load(open(TEMP_DATA_DIR+'js_paths_logo.pkl', 'rb'))
-        exe
-    except:
-        num_segments=len(glob.glob('path/pixel_path/'+test_logo+'/*.csv'))
-        img=cv2.imread('imgs/'+test_logo+'_resized.png')
-        # plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-        # plt.show()
-        # replocate the image
-        offset_ratio=0.95
-        img_new = np.ones((image_thresh.shape[0]+2*img.shape[0],image_thresh.shape[1]+2*img.shape[1],3))*255
-        pixel_offset = np.array([(image_thresh.shape[1]+img.shape[1])*0.8,(image_thresh.shape[0]+img.shape[0])*(1-offset_ratio)]).astype(int)
-        img_new[pixel_offset[1]:img.shape[0]+pixel_offset[1],pixel_offset[0]:pixel_offset[0]+img.shape[1]]=img
-        img = img_new
-        # cv2.imwrite(TEMP_DATA_DIR+'img_logo.png',img)
-        # plt.imshow(img)
-        # plt.show()
-        # relocate paths
-        pixel_paths=[]
-        for i in range(num_segments):
-            pixel_paths.append(np.loadtxt('path/pixel_path/'+test_logo+'/%i.csv'%i,delimiter=',').reshape((-1,3)))
-            pixel_paths[-1][:,:2]+=pixel_offset
-        pickle.dump(pixel_paths, open(TEMP_DATA_DIR+'pixel_paths_logo.pkl', 'wb'))
-        
-        print("PROJECTING TO IPAD")
-        _,cartesian_paths_world,force_paths=image2plane(img,ipad_pose,pixel2mm,pixel_paths,pixel2force)
-        pickle.dump(cartesian_paths_world, open(TEMP_DATA_DIR+'cartesian_paths_world_logo.pkl', 'wb'))
-        
-        print("SOLVING JOINT TRAJECTORY")
-        js_paths=[]
-        for cartesian_path in cartesian_paths_world:
-            curve_js=robot.find_curve_js(cartesian_path,[R_pencil_base]*len(cartesian_path),q_seed)
-            js_paths.append(curve_js)
-        pickle.dump(js_paths, open(TEMP_DATA_DIR+'js_paths_logo.pkl', 'wb'))
+    num_segments=len(glob.glob('path/pixel_path/'+test_logo+'/*.csv'))
+    img=cv2.imread('imgs/'+test_logo+'_resized.png')
+    # plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+    # plt.show()
+    # replocate the image
+    offset_ratio=0.975
+    img_new = np.ones((image_thresh.shape[0]+2*img.shape[0],image_thresh.shape[1]+2*img.shape[1],3))*255
+    pixel_offset = np.array([(image_thresh.shape[1]+img.shape[1])*0.8,(image_thresh.shape[0]+img.shape[0])*(1-offset_ratio)]).astype(int)
+    img_new[pixel_offset[1]:img.shape[0]+pixel_offset[1],pixel_offset[0]:pixel_offset[0]+img.shape[1]]=img
+    img = img_new
+    # cv2.imwrite(TEMP_DATA_DIR+'img_logo.png',img)
+    # plt.imshow(img)
+    # plt.show()
+    # relocate paths
+    pixel_paths=[]
+    for i in range(num_segments):
+        pixel_paths.append(np.loadtxt('path/pixel_path/'+test_logo+'/%i.csv'%i,delimiter=',').reshape((-1,3)))
+        pixel_paths[-1][:,:2]+=pixel_offset
+    pickle.dump(pixel_paths, open(TEMP_DATA_DIR+'pixel_paths_logo.pkl', 'wb'))
+    
+    print("PROJECTING TO IPAD")
+    _,cartesian_paths_world,force_paths=image2plane(img,ipad_pose,pixel2mm,pixel_paths,pixel2force)
+    pickle.dump(cartesian_paths_world, open(TEMP_DATA_DIR+'cartesian_paths_world_logo.pkl', 'wb'))
+    
+    print("SOLVING JOINT TRAJECTORY")
+    js_paths=[]
+    for cartesian_path in cartesian_paths_world:
+        curve_js=robot.find_curve_js(cartesian_path,[R_pencil_base]*len(cartesian_path),q_seed)
+        js_paths.append(curve_js)
+    pickle.dump(js_paths, open(TEMP_DATA_DIR+'js_paths_logo.pkl', 'wb'))
     ### Execute
     execution_st = time.time()
     

@@ -363,8 +363,8 @@ class MotionController(object):
             tip_now = self.robot.fwd(q_now)
             tip_now_ipad = self.ipad_pose_inv_T*tip_now
             # read force
-            ft_tip = self.ad_ati2pentip_T@self.ft_reading
-            # ft_tip = self.ad_ati2pentip_T@np.append(np.zeros(3),self.ft_reading[3:])
+            # ft_tip = self.ad_ati2pentip_T@self.ft_reading
+            ft_tip = self.ad_ati2pentip_T@np.append(np.zeros(3),self.ft_reading[3:])
             # fz_now = float(ft_tip[-1])
             fz_now = float(self.ft_reading[-1])
             # apply low pass filter
@@ -454,7 +454,7 @@ class MotionController(object):
             self.position_cmd(q)
             time.sleep(self.TIMESTEP)
     
-    def trajectory_position_cmd(self,q_all,v=0.4):
+    def trajectory_position_cmd(self,q_all,v=0.4,wait_time=0):
 
         if len(q_all)<100:
             iter_num = int(100/(len(q_all)-1))
@@ -471,6 +471,12 @@ class MotionController(object):
             self.position_cmd(traj_q[i])
             if self.USE_RR_ROBOT:
                 time.sleep(self.TIMESTEP)
+        
+        ###additional points for accuracy
+        start_time=time.time()
+        while time.time()-start_time<wait_time:
+            self.position_cmd(traj_q[-1])
+            time.sleep(self.TIMESTEP)
     
     def trajectory_position_cmd_nowait(self,q_all,v=0.4):
 
