@@ -137,8 +137,6 @@ PIXEL_PLAN = True
 CART_PLAN = True
 JS_PLAN = True
 
-INITIAL_LOGO_PLAN=True
-
 img_names = ['alex','brandon','eric','glenn','julia','molly','thea','wen']
 img_count = 0
 
@@ -147,94 +145,88 @@ q_init = mctrl.read_position()
 while True:
     start_time=time.time()
     
+
     def robot_thinking():
         print('Robot thinking')
-        origin_acc = mctrl.params["moveL_acc_lin"] 
-        origin_lookaheadt = mctrl.params['lookahead_time']
-        origin_fdamp = mctrl.params['force_ctrl_damping']
-        mctrl.params['lookahead_time'] = 0.04
-        mctrl.params["moveL_acc_lin"] = 0.6
-        mctrl.params['force_ctrl_damping'] = 180
+        origin_jogging_speed = controller_params['jogging_speed']
+        origin_johging_acc = controller_params['jogging_acc']
+        controller_params['jogging_speed'] = 300
+        controller_params['jogging_acc'] = 100
         while t_robot_thinking_flag:
-            ########### Logo words ###########
-            ####### write words
-            num_segments=len(glob.glob('path/pixel_path/'+test_logo+'/*.csv'))
-            
-            if INITIAL_LOGO_PLAN:
-                img=cv2.imread('imgs/'+test_logo+'_resized.png')
-                # replocate the image and pixel paths
-                img_new = np.ones((img.shape[0]*3,img.shape[1]*3,3))*255
-                pixel_paths=[]
-                for i in range(9):
-                    pixel_offset = np.array([(i%3)*img.shape[1],(i//3)*img.shape[0]])
-                    img_new[pixel_offset[1]:img.shape[0]+pixel_offset[1],pixel_offset[0]:pixel_offset[0]+img.shape[1],:]=img
-                    for j in range(num_segments):
-                        pixel_paths.append(np.loadtxt('path/pixel_path/'+test_logo+'/%i.csv'%j,delimiter=',').reshape((-1,3)))
-                        pixel_paths[-1][:,:2]+=pixel_offset
-                img = img_new
-                if not t_robot_thinking_flag:
+            # back to waiting position
+            mctrl.jog_joint_position_cmd(q_waiting,v=controller_params['jogging_speed'])
+            try:    
+                z_height = 30 # z height of the motion
+                # random choose one type of motion from four
+                motion_type = np.random.randint(0,3)
+                # print("Motion type:",motion_type)
+                if motion_type == 0: # random circle motion
+                    # random choose a radius
+                    radius = np.random.uniform(20,np.min(paper_size)/2-0.01)
+                    # random choose a center such that the circle is within the paper
+                    center = np.random.uniform(radius,np.min(paper_size)-radius,2)
+                    center = center-np.array(paper_size)/2
+                    # sample N points on the circle
+                    angle_sample = np.linspace(0,2*np.pi,100)
+                    circle_sample = np.array([radius*np.cos(angle_sample),radius*np.sin(angle_sample),np.ones(100)*z_height]).T+np.append(center,0)
+                    circle_sample = np.vstack((circle_sample,circle_sample))[np.random.randint(0,100):np.random.randint(0,100)+100]
+                    curve_sample = circle_sample[::np.random.choice([1,-1])]
+                    motion_speed = np.random.uniform(20,30)
+                elif motion_type == 1: # random bezier curve motion
+                    # random choose three points
+                    points = np.random.uniform([0,0],paper_size,[3,2])
+                    points = points-np.array(paper_size)/2
+                    points = np.hstack((points,np.array([z_height,z_height,z_height]).reshape(-1,1)))
+                    # sample N points on the curve
+                    t_sample = np.linspace(0,1,100)
+                    curve_sample = points[1] + np.reshape(((1-t_sample)**2),(-1,1))*(points[0]-points[1]) + np.reshape((t_sample**2),(-1,1))*(points[2]-points[1])
+                    motion_speed = np.random.uniform(20,30)
+                elif motion_type == 2: # random oscillation motion
+                    # random choose two points
+                    points = np.random.uniform([0,0],paper_size-10,[2,2])
+                    points = points-np.array(paper_size)/2
+                    points = np.hstack((points,np.array([z_height,z_height]).reshape(-1,1)))
+                    normal_direrction = (points[1]-points[0])/np.linalg.norm(points[1]-points[0])
+                    normal_direrction = rot(np.array([0,0,1]),np.pi/2)@normal_direrction
+                    directions = [-1,1]
+                    # sample N points on the curve
+                    N_points = np.random.randint(30,100)
+                    t_sample = np.linspace(0,1,N_points)
+                    curve_sample = []
+                    for i in range(N_points):
+                        curve_sample.append(points[0]*(1-t_sample[i])+points[1]*t_sample[i]+normal_direrction*np.random.uniform(0,10,1)*directions[i%2])
+                    curve_sample = np.array(curve_sample)
+                    motion_speed = np.random.uniform(20,30)
+                elif motion_type == 3: # random traveling points
+                    # random choose N points
+                    curve_sample = np.random.uniform([10,10],paper_size-10,[np.random.randint(3,10),2])
+                    curve_sample = curve_sample-np.array(paper_size)/2
+                    curve_sample = np.hstack((curve_sample,np.ones((curve_sample.shape[0],1))*z_height))
+                    motion_speed = np.random.uniform(20,30)
+
+                # convert to world frame
+                curve_sample_base = (ipad_pose[:3,:3]@curve_sample.T).T + ipad_pose[:3,-1]
+                if t_robot_thinking_flag == False:
                     break
-                print("PROJECTING TO IPAD")
-                _,cartesian_paths_world,force_paths=image2plane(img,ipad_pose,pixel2mm,pixel_paths,pixel2force)
-                pickle.dump(cartesian_paths_world, open(TEMP_DATA_DIR+'cartesian_paths_world_logo.pkl', 'wb'))
-                pickle.dump(force_paths, open(TEMP_DATA_DIR+'force_paths_logo.pkl', 'wb'))
-                if not t_robot_thinking_flag:
+                # solve joint trajectory
+                curve_js=robot.find_curve_js(curve_sample_base,[R_pencil_base]*len(curve_sample_base),q_seed)
+                # send to robot
+                if t_robot_thinking_flag == False:
                     break
-                print("SOLVING JOINT TRAJECTORY")
-                js_paths=[]
-                for cartesian_path in cartesian_paths_world:
-                    curve_js=robot.find_curve_js(cartesian_path,[R_pencil_base]*len(cartesian_path),q_seed)
-                    js_paths.append(curve_js)
-                pickle.dump(js_paths, open(TEMP_DATA_DIR+'js_paths_logo.pkl', 'wb'))
-            else:
-                cartesian_paths_world = pickle.load(open(TEMP_DATA_DIR+'cartesian_paths_world_logo.pkl', 'rb'))
-                force_paths = pickle.load(open(TEMP_DATA_DIR+'force_paths_logo.pkl', 'rb'))
-                js_paths = pickle.load(open(TEMP_DATA_DIR+'js_paths_logo.pkl', 'rb'))
-            
-            if not t_robot_thinking_flag:
-                break
-            print('START DRAWING LOGO')
-            
-            num_segments = len(js_paths)
-            print("LOGO NUM SEGMENTS: ", num_segments)
-            ###Execute
-            try:
-                mctrl.press_button_routine(p_button,R_pencil,h_offset=hover_height,lin_vel=controller_params['jogging_speed'], q_seed=q_seed)
-                for i in range(0,num_segments):
-                    if len(js_paths[i])<=1:
-                        continue
-                    cartesian_path_world = cartesian_paths_world[i]
-                    force_path = force_paths[i]
-                    curve_xyz = np.dot(mctrl.ipad_pose_inv[:3,:3],cartesian_path_world.T).T+np.tile(mctrl.ipad_pose_inv[:3,-1],(len(cartesian_path_world),1))
-                    curve_xy = curve_xyz[:,:2] # get xy curve
-                    fz_des = force_path*(-1) # transform to tip desired
-                    # fz_des = fz_des*pixelforce_ratio_calib
-                    lam = calc_lam_js(js_paths[i],mctrl.robot) # get path length
-                    if lam[-1] < smallest_lam:
-                        continue
-                    if not t_robot_thinking_flag:
-                        break
-                    traj_q, traj_xy, traj_fz, time_bp = mctrl.trajectory_generate(js_paths[i],curve_xy,fz_des) # get trajectory and time_bp
-                    #### motion start ###
-                    if not t_robot_thinking_flag:
-                        break
-                    mctrl.motion_start_routine(traj_q[0],traj_fz[0],hover_height,1.5,lin_vel=controller_params['jogging_speed'])
-                    if not t_robot_thinking_flag:
-                        break
-                    joint_force_exe, cart_force_exe = mctrl.trajectory_force_PIDcontrol(traj_xy,traj_q,traj_fz,force_lookahead=True)
-                    if not t_robot_thinking_flag:
-                        break
-                    mctrl.motion_end_routine(traj_q[-1],hover_height, lin_vel=controller_params['jogging_speed'])
-            except KeyboardInterrupt:
-                break
-            if not t_robot_thinking_flag:
-                break
-        
-        #jog to end point
-        mctrl.motion_end_routine(traj_q[-1],hover_height*4, lin_vel=controller_params['jogging_speed'])
-        mctrl.params['lookahead_time'] = origin_lookaheadt
-        mctrl.params['force_ctrl_damping'] = origin_fdamp
-        mctrl.params["moveL_acc_lin"]  = origin_acc         
+                mctrl.jog_joint_position_cmd(curve_js[0],v=controller_params['jogging_speed'])
+                if t_robot_thinking_flag == False:
+                    break
+                mctrl.trajectory_position_cmd(curve_js,v=motion_speed,wait_time=0.25)
+                if t_robot_thinking_flag == False:
+                    break
+                mctrl.jog_joint_position_cmd(q_waiting,v=controller_params['jogging_speed'],wait_time=0.5)
+            except:
+                traceback.print_exc()
+                print('Robot thinking error')
+                continue
+
+        controller_params['jogging_speed'] = origin_jogging_speed
+        controller_params['jogging_acc'] = origin_johging_acc
         print('Robot ready')
 
     # start robot thinking while waiting for user input

@@ -98,6 +98,49 @@ test_img_path = 'temp_data/img_julia.jpg'
 test_logo = 'logos_words'
 #########################################################EXECUTION#########################################################
 while True:
+    
+    ########### Logo words ###########
+    ####### write words
+    num_segments=len(glob.glob('path/pixel_path/'+test_logo+'/*.csv'))
+    img=cv2.imread('imgs/'+test_logo+'_resized.png')
+    # plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+    # plt.show()
+    # replocate the image
+    img_new = np.ones((img.shape[0]*3,img.shape[1]*3,3))*255
+    pixel_paths=[]
+    for i in range(9):
+        pixel_offset = np.array([(i%3)*img.shape[1],(i//3)*img.shape[0]])
+        img_new[pixel_offset[1]:img.shape[0]+pixel_offset[1],pixel_offset[0]:pixel_offset[0]+img.shape[1],:]=img
+        for j in range(num_segments):
+            pixel_paths.append(np.loadtxt('path/pixel_path/'+test_logo+'/%i.csv'%j,delimiter=',').reshape((-1,3)))
+            pixel_paths[-1][:,:2]+=pixel_offset
+    img = img_new
+    # cv2.imwrite(TEMP_DATA_DIR+'img_logo.png',img)
+    # plt.imshow(img)
+    # plt.show()
+    # relocate paths
+    
+    print("PROJECTING TO IPAD")
+    _,cartesian_paths_world,force_paths=image2plane(img,ipad_pose,pixel2mm,pixel_paths,pixel2force)
+    
+    print("SOLVING JOINT TRAJECTORY")
+    js_paths=[]
+    for cartesian_path in cartesian_paths_world:
+        curve_js=robot.find_curve_js(cartesian_path,[R_pencil]*len(cartesian_path),q_seed)
+        js_paths.append(curve_js)
+        
+    image_out = np.ones_like(img)*255
+    for stroke in pixel_paths:
+        for n in stroke:
+            image_out = cv2.circle(image_out, (int(n[0]), int(n[1])), round(n[2]), 0, -1)
+            image_out[int(n[1]),int(n[0])]=120
+            cv2.imshow("Image", image_out)
+            if cv2.waitKey(1) == ord('q'): 
+                # press q to terminate the loop 
+                cv2.destroyAllWindows() 
+                break 
+    exit()
+    
     start_time=time.time()
     
     ### simulating image capture
