@@ -110,7 +110,8 @@ def travel_pixel_skeletons(image,resize_ratio=2,max_radias=10,min_radias=2,min_s
             x = white_pixels[1][i]
             y = white_pixels[0][i]
             # filter out white pixels with distance smaller than 1
-            if round(dist_transform[y,x])>=min_radias:
+            # if round(dist_transform[y,x])>=min_radias:
+            if round(dist_transform[y,x])>=2:
                 white_pixels_removed.append([y,x])
                 image_skeleton[y,x]=255
             image_viz_boarder[y,x]=255-dist_transform[y,x]
@@ -262,21 +263,21 @@ def travel_pixel_skeletons(image,resize_ratio=2,max_radias=10,min_radias=2,min_s
         subgraphs_split = []
         small_flag = True
         for subg in subgraphs:
-            if subg.number_of_nodes() > 2500 and subg.number_of_edges() > 4000:
+            if subg.number_of_nodes() > 2000 or subg.number_of_edges() > 2000:
                 print("Subgraph is too large") if SHOW_TSP else None
                 small_flag = False
 
-                node_y = [node[1] for node in subg.nodes]
+                node_x = [node[0] for node in subg.nodes]
                 
-                max_y = max(node_y)
-                min_y = min(node_y)
-                split_y = (max_y+min_y)/2
-                print("Split y: ",split_y) if SHOW_TSP else None
+                max_x = max(node_x)
+                min_x = min(node_x)
+                split_x = (max_x+min_x)/2
+                print("Split x: ",split_x) if SHOW_TSP else None
                 print('nodes: ',subg.number_of_nodes(),'edges: ',subg.number_of_edges()) if SHOW_TSP else None
                 for edge in subg.edges:
-                    if edge[0][1] > split_y and edge[1][1] <= split_y:
+                    if edge[0][0] > split_x and edge[1][0] <= split_x:
                         subg.remove_edge(*edge)
-                    elif edge[1][1] > split_y and edge[0][1] <= split_y:
+                    elif edge[1][0] > split_x and edge[0][0] <= split_x:
                         subg.remove_edge(*edge)
                 subg.remove_nodes_from(list(nx.isolates(subg)))
                 subsubgraphs = [subg.subgraph(c).copy() for c in nx.connected_components(subg)]

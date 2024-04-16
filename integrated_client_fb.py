@@ -29,7 +29,7 @@ if ROBOT_NAME=='ABB_1200_5_90':
     radius=500 ###eef position to robot base distance w/o z height
     # angle_range=np.array([-3*np.pi/4,-np.pi/4]) ###angle range of joint 1 for robot to move
     angle_range=np.array([-np.pi/2,np.pi/2]) ###angle range of joint 1 for robot to move
-    height_range=np.array([600,1500]) ###height range for robot to move
+    height_range=np.array([750,1000]) ###height range for robot to move
     # p_start=np.array([0,-radius,700])	###initial position
     # R_start=np.array([	[0,1,0],
     #                     [0,0,-1],
@@ -88,22 +88,24 @@ face_track_x = np.array([-np.sin(np.arctan2(p_tracking_start[1],p_tracking_start
 face_track_y = np.array([0,0,1])
 target_size=[1200,800]
 smallest_lam = 20 # smallest path length (unit: mm)
+max_stroke_w = 10 # max stroke width
+min_stroke_w = 7 # min stroke width
 pixelforce_ratio_calib = 1.2 # pixel to force ratio calibration
 ######## Controller parameters ###
 controller_params = {
-    "force_ctrl_damping": 180.0, # 200, 180, 90, 60
+    "force_ctrl_damping": 160.0, # 200, 180, 90, 60
     "force_epsilon": 0.1, # Unit: N
-    "moveL_speed_lin": 10.0, # 10 Unit: mm/sec
-    "moveL_acc_lin": 0.6, # Unit: mm/sec^2
+    "moveL_speed_lin": 20.0, # 10 Unit: mm/sec
+    "moveL_acc_lin": 3.6, # Unit: mm/sec^2 0.6, 1.2
     "moveL_speed_ang": np.radians(10), # Unit: rad/sec
     "trapzoid_slope": 1, # trapzoidal load profile. Unit: N/sec
     "load_speed": 10.0, # Unit mm/sec
     "unload_speed": 1.0, # Unit mm/sec
-    'settling_time': 1, # Unit: sec
-    "lookahead_time": 0.02, # Unit: sec
-    "jogging_speed": 150, # Unit: mm/sec
-    "jogging_acc": 30, # Unit: mm/sec^2
-    'force_filter_alpha': 0.99 # force low pass filter alpha
+    'settling_time': 0.2, # Unit: sec
+    "lookahead_time": 0.132, # Unit: sec, 0.02
+    "jogging_speed": 200, # Unit: mm/sec
+    "jogging_acc": 60, # Unit: mm/sec^2
+    'force_filter_alpha': 0.75 # force low pass filter alpha
     }
 ### Define the motion controller
 mctrl=MotionController(robot,ipad_pose,H_pentip2ati,controller_params,TIMESTEP,USE_RR_ROBOT=USE_RR_ROBOT,
@@ -128,7 +130,7 @@ TEMP_DATA_DIR = 'temp_data/'
 # TEMP_DATA_DIR = 'imgs/'
 test_logo='logos_words'
 
-TAKE_FACE_IMAGE = True
+TAKE_FACE_IMAGE = False
 FACE_PORTRAIT = True
 PIXEL_PLAN = True
 CART_PLAN = True
@@ -157,7 +159,7 @@ while True:
                 z_height = 30 # z height of the motion
                 # random choose one type of motion from four
                 motion_type = np.random.randint(0,3)
-                print("Motion type:",motion_type)
+                # print("Motion type:",motion_type)
                 if motion_type == 0: # random circle motion
                     # random choose a radius
                     radius = np.random.uniform(20,np.min(paper_size)/2-0.01)
@@ -194,7 +196,7 @@ while True:
                     for i in range(N_points):
                         curve_sample.append(points[0]*(1-t_sample[i])+points[1]*t_sample[i]+normal_direrction*np.random.uniform(0,10,1)*directions[i%2])
                     curve_sample = np.array(curve_sample)
-                    motion_speed = np.random.uniform(15,22)
+                    motion_speed = np.random.uniform(20,30)
                 elif motion_type == 3: # random traveling points
                     # random choose N points
                     curve_sample = np.random.uniform([10,10],paper_size-10,[np.random.randint(3,10),2])
@@ -222,6 +224,7 @@ while True:
                 traceback.print_exc()
                 print('Robot thinking error')
                 continue
+            
 
             count+=1
 
@@ -229,15 +232,17 @@ while True:
         controller_params['jogging_acc'] = origin_johging_acc
         print('Robot ready')
 
-    # # start robot thinking while waiting for user input
-    # t_robot_thinking_flag = True
-    # t_robot_thinking = threading.Thread(target=robot_thinking)
-    # t_robot_thinking.start()
-    # ## Next round activatoion
-    # input("Press Enter to start next round")
-    # # stop robot thinking
-    # t_robot_thinking_flag = False
-    # t_robot_thinking.join()
+    # start robot thinking while waiting for user input
+    t_robot_thinking_flag = True
+    t_robot_thinking = threading.Thread(target=robot_thinking)
+    t_robot_thinking.start()
+    ## Next round activatoion
+    input_key = ''
+    while input_key!='n':
+        input_key = input("Press n + Enter to start next round")
+    # stop robot thinking
+    t_robot_thinking_flag = False
+    t_robot_thinking.join()
 
     #jog to initial_position
     mctrl.jog_joint_position_cmd(q_tracking_start,v=controller_params['jogging_speed'],wait_time=0.5)
@@ -317,8 +322,8 @@ while True:
         cv2.imwrite(TEMP_DATA_DIR+'img.jpg',img)
     else:
         img = cv2.imread(TEMP_DATA_DIR+'img.jpg')
-        plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-        plt.show()
+        # plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        # plt.show()
         # img = cv2.imread(TEMP_DATA_DIR+'img_'+img_names[img_count%len(img_names)]+'.jpg')
         # print("Drawing image: ", img_names[img_count%len(img_names)])
         # img_count+=1
@@ -357,7 +362,7 @@ while True:
         # pixel_paths, image_thresh = travel_pixel_dots(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=image_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
         
         face_drawing_order=[10,1,(6,1),(7,8,9),(2,1),(3,1),(4,1),(5,1),0] # hair, face, nose, upper lip, teeth, lower lip, left eyebrow, right eyebrow, left eye, right eye
-        pixel_paths, image_thresh = travel_pixel_skeletons(anime_img,resize_ratio=resize_ratio,max_radias=10,min_radias=2,face_mask=image_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
+        pixel_paths, image_thresh = travel_pixel_skeletons(anime_img,resize_ratio=resize_ratio,max_radias=max_stroke_w,min_radias=min_stroke_w,face_mask=image_mask,face_drawing_order=face_drawing_order,SHOW_TSP=True)
         pickle.dump(pixel_paths, open(TEMP_DATA_DIR+'pixel_paths.pkl', 'wb'))
         cv2.imwrite(TEMP_DATA_DIR+'img_thresh.jpg',image_thresh)
     else:
@@ -402,6 +407,7 @@ while True:
             force_path = force_paths[i]
             curve_xyz = np.dot(mctrl.ipad_pose_inv[:3,:3],cartesian_path_world.T).T+np.tile(mctrl.ipad_pose_inv[:3,-1],(len(cartesian_path_world),1))
             curve_xy = curve_xyz[:,:2] # get xy curve
+            # curve_xy = rot([0,0,1],np.pi)@np.array(curve_xy).T
             fz_des = force_path*(-1) # transform to tip desired
             fz_des = fz_des*pixelforce_ratio_calib
             lam = calc_lam_js(js_paths[i],mctrl.robot) # get path length
@@ -409,7 +415,7 @@ while True:
                 continue
             traj_q, traj_xy, traj_fz, time_bp = mctrl.trajectory_generate(js_paths[i],curve_xy,fz_des) # get trajectory and time_bp
             #### motion start ###
-            mctrl.motion_start_routine(traj_q[0],traj_fz[0],hover_height,2,lin_vel=controller_params['jogging_speed'])
+            mctrl.motion_start_routine(traj_q[0],traj_fz[0],hover_height,1.5,lin_vel=controller_params['jogging_speed'])
             joint_force_exe, cart_force_exe = mctrl.trajectory_force_PIDcontrol(traj_xy,traj_q,traj_fz,force_lookahead=True)
             mctrl.motion_end_routine(traj_q[-1],hover_height, lin_vel=controller_params['jogging_speed'])
     except KeyboardInterrupt:
@@ -460,6 +466,13 @@ while True:
     execution_st = time.time()
     
     print('START DRAWING LOGO')
+    origin_movelspeed = mctrl.params['moveL_speed_lin']
+    origin_acc = mctrl.params["moveL_acc_lin"] 
+    origin_lookaheadt = mctrl.params['lookahead_time']
+    origin_fdamp = mctrl.params['force_ctrl_damping']
+    mctrl.params['lookahead_time'] = 0.04
+    mctrl.params["moveL_acc_lin"] = 0.6
+    mctrl.params['force_ctrl_damping'] = 180
     num_segments = len(js_paths)
     print("LOGO NUM SEGMENTS: ", num_segments)
     ###Execute
@@ -477,12 +490,15 @@ while True:
             continue
         traj_q, traj_xy, traj_fz, time_bp = mctrl.trajectory_generate(js_paths[i],curve_xy,fz_des) # get trajectory and time_bp
         #### motion start ###
-        mctrl.motion_start_routine(traj_q[0],traj_fz[0],hover_height,2,lin_vel=controller_params['jogging_speed'])
+        mctrl.motion_start_routine(traj_q[0],traj_fz[0],hover_height,1.5,lin_vel=controller_params['jogging_speed'])
         joint_force_exe, cart_force_exe = mctrl.trajectory_force_PIDcontrol(traj_xy,traj_q,traj_fz,force_lookahead=True)
         mctrl.motion_end_routine(traj_q[-1],hover_height, lin_vel=controller_params['jogging_speed'])
 
     #jog to end point
     mctrl.motion_end_routine(traj_q[-1],hover_height*4, lin_vel=controller_params['jogging_speed'])
+    mctrl.params['lookahead_time'] = origin_lookaheadt
+    mctrl.params['force_ctrl_damping'] = origin_fdamp
+    mctrl.params["moveL_acc_lin"]  = origin_acc
 
     print('FINISHED DRAWING LOGO')
     #######################################

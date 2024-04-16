@@ -126,7 +126,11 @@ class MotionController(object):
     
     def wrench_wire_cb(self,w,value,t):
 
-        self.ft_reading = np.array([value['torque']['x'],value['torque']['y'],value['torque']['z'],value['force']['x'],value['force']['y'],value['force']['z']])
+        ft_reading_now = np.array([value['torque']['x'],value['torque']['y'],value['torque']['z'],value['force']['x'],value['force']['y'],value['force']['z']])
+        if self.ft_reading is None:
+            self.ft_reading = ft_reading_now
+        else:
+            self.ft_reading = self.ft_reading*(1-self.params['force_filter_alpha'])+ft_reading_now*self.params['force_filter_alpha']
         self.last_ft_time = time.time()
 
     def force_impedence_ctrl(self,f_err):
@@ -237,8 +241,9 @@ class MotionController(object):
         T_button_robot=self.ipad_pose_T*Transform(R_button,p_button+np.array([0,0,1]))
         q_button_offset=self.robot.inv(T_button_offset_robot.p,T_button_offset_robot.R,q_seed)[0]
         q_button=self.robot.inv(T_button_robot.p,T_button_robot.R,q_seed)[0]
-        self.jog_joint_position_cmd(q_button_offset,v=lin_vel) # move about the button
-        self.jog_joint_position_cmd(q_button,v=lin_vel) # move about the button
+        self.trajectory_position_cmd(np.vstack((self.read_position(),q_button_offset,q_button)),v=lin_vel) # move about the button
+        # self.jog_joint_position_cmd(q_button_offset,v=lin_vel) 
+        # self.jog_joint_position_cmd(q_button,v=lin_vel) # move about the button
         self.RR_ati_cli.setf_param("set_tare", RR.VarValue(True, "bool"))
         self.force_load_z(-press_force,load_speed=lin_vel) # press the button
         self.jog_joint_position_cmd(q_button_offset,v=lin_vel) # move about the button
@@ -367,11 +372,7 @@ class MotionController(object):
             ft_tip = self.ad_ati2pentip_T@np.append(np.zeros(3),self.ft_reading[3:])
             # fz_now = float(ft_tip[-1])
             fz_now = float(self.ft_reading[-1])
-            # apply low pass filter
-            if force_tracked is None:
-                force_tracked = fz_now
-            else:
-                force_tracked = force_tracked*(1-self.params['force_filter_alpha'])+fz_now*self.params['force_filter_alpha']
+            force_tracked = fz_now
             if np.linalg.norm(ft_tip[3:])>self.FORCE_PROTECTION: # force protection break
                 print("force: ",ft_tip[3:])
                 print("force too large")
