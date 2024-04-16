@@ -130,7 +130,7 @@ TEMP_DATA_DIR = 'temp_data/'
 # TEMP_DATA_DIR = 'imgs/'
 test_logo='logos_words'
 
-TAKE_FACE_IMAGE = False
+TAKE_FACE_IMAGE = True
 FACE_PORTRAIT = True
 PIXEL_PLAN = True
 CART_PLAN = True
