@@ -80,7 +80,7 @@ def travel_pixel_skeletons(image,resize_ratio=2,max_radias=10,min_radias=2,min_s
     print("image size: ",image.shape) if SHOW_TSP else None
     print("face mask size: ",face_mask.shape) if SHOW_TSP and face_mask is not None else None
     image_filled = deepcopy(image)
-    image_vis = deepcopy(image)*2/3
+    image_vis = deepcopy(image)*0.9
 
     graph=nx.Graph()
     in_graph_pix = []
@@ -126,7 +126,13 @@ def travel_pixel_skeletons(image,resize_ratio=2,max_radias=10,min_radias=2,min_s
         # plt.imshow(image_vis+image_viz_boarder, cmap='gray')
         # plt.show()
         
-        # plt.imshow(image_vis+image_skeleton, cmap='gray')
+        # visualize skeleton
+        # image_skele_circle = deepcopy(image_skeleton)
+        # for i in range(len(white_pixels[0])):
+        #     x = white_pixels[1][i]
+        #     y = white_pixels[0][i]
+        #     image_skele_circle = cv2.circle(image_skele_circle, (x, y), 2, 255, -1)
+        # plt.imshow(np.clip(image_vis+image_skele_circle,0,255).astype(int), cmap='gray')
         # plt.show()
         
         
