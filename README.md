@@ -10,9 +10,23 @@
 `python -m pip install -r requirements.txt`
 
 
-## Instructions
+## Instruction
+* Start Robot Driver: `cd ~/Desktop/abb_driver_csharp-2024-01-02/ && source run_driver.sh `
+* Start ATI Driver: `cd ~/Desktop/ati_robotraconteur_driver/ && source run_sensor.sh`
+* Start Camera Driver: `cd ~/Desktop/robotic_portrait/face_tracking && python face_tracking_service.py `
 
-### Running the Robot
+
+## Carlibration
+* Start Aruco Detection: `cd ~/Desktop/robotic_portrait/face_tracking/ && python aruco_service.py`
+* Start Aruco Calibration: `cd ~/Desktop/robotic_portrai/ &&$ source calibration.sh`
+Jog the robot such that the camera can see the aruco tag, and click `use aruco`. Then quit the Aruco Detection Service and Calibration script.
+
+* Force-based Calibration: `cd ~/Desktop/robotic_portrait/ && python recalibration_force.py`
+
+## Draw the Portrait
+Keep the ATI and Camera driver opened, run `python integrated_client_fb.py`.
+
+<!-- ### Running the Robot
 `.\ABBRobotRaconteurDriver.exe --robot-info-file=abb_1200_5_90_robot_default_config.yml`
 
 ### Config Files
@@ -47,4 +61,4 @@ Then rerun the force-based calibration again for accurate calibration `python re
 `python traj_gen_js.py`
 
 ### Drawing
-`python execute.py`
+`python execute.py` -->

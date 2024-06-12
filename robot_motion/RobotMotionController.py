@@ -218,10 +218,10 @@ class MotionController(object):
         self.RR_ati_cli.setf_param("set_tare", RR.VarValue(True, "bool"))
         if SHOW_STATUS:
             input("Set tare. Start load force?")
-        print("Start load force")
+        # print("Start load force")
         # load force
         ft_record=self.force_load_z(f_start)
-        print("Load force done")
+        # print("Load force done")
         
         return ft_record
     
@@ -370,8 +370,8 @@ class MotionController(object):
             # read force
             # ft_tip = self.ad_ati2pentip_T@self.ft_reading
             ft_tip = self.ad_ati2pentip_T@np.append(np.zeros(3),self.ft_reading[3:])
-            # fz_now = float(ft_tip[-1])
-            fz_now = float(self.ft_reading[-1])
+            fz_now = float(ft_tip[-1])
+            # fz_now = float(self.ft_reading[-1])
             force_tracked = fz_now
             if np.linalg.norm(ft_tip[3:])>self.FORCE_PROTECTION: # force protection break
                 print("force: ",ft_tip[3:])

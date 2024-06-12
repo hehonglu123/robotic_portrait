@@ -114,7 +114,7 @@ corners=np.dot(ipad_pose[:3,:3],corners_offset.T).T+np.tile(ipad_pose[:3,-1],(4,
 
 ###loop four corners to get precise position base on force feedback
 corners_adjusted=[]
-f_d=1	#10N push down
+f_d=0.75	#10N push down
 for corner in corners:
 	corner_top=corner+20*ipad_pose[:3,-2]
 	corner_top_safe=corner+50*ipad_pose[:3,-2]

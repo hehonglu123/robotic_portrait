@@ -135,7 +135,7 @@ def create_pipeline():
 	tracklets_xout.setStreamName("tracklets")
 	objectTracker.out.link(tracklets_xout.input)
 	print("Pipeline created.")
-	return pipeline
+	return pipeline,cam
 
 
 VIZ_FRAME=True
@@ -152,7 +152,17 @@ with RR.ServerNodeSetup("experimental.face_tracking", 52222):
 	RRN.RegisterService("Face_tracking","experimental.face_tracking.face_tracking_obj",face_tracking_inst)
 	
 	print('ctrl+c to quit')
-	with dai.Device(create_pipeline()) as device:
+	pipeline,cam = create_pipeline()
+	with dai.Device(pipeline) as device:
+		# controlIn = pipeline.create(dai.node.XLinkIn)
+		# controlIn.setStreamName('control')
+		# controlIn.out.link(cam.inputControl)
+		# controlQueue = device.getInputQueue(controlIn.getStreamName())
+		# ctrl = dai.CameraControl()
+		# ctrl.setManualExposure(25000,800)
+		# controlQueue.send(ctrl)
+
+
 		frame_q = device.getOutputQueue("frame")
 		tracklets_q = device.getOutputQueue("tracklets")
 		pass_q = device.getOutputQueue("pass_out")

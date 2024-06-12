@@ -29,8 +29,8 @@ if ROBOT_NAME=='ABB_1200_5_90':
     # robot=robot_obj(ROBOT_NAME,'config/ABB_1200_5_90_robot_default_config.yml',tool_file_path='config/brush_pen.csv')
     radius=500 ###eef position to robot base distance w/o z height
     # angle_range=np.array([-3*np.pi/4,-np.pi/4]) ###angle range of joint 1 for robot to move
-    angle_range=np.array([-np.pi/2,np.pi/2]) ###angle range of joint 1 for robot to move
-    height_range=np.array([750,1000]) ###height range for robot to move
+    angle_range=np.radians([-5,5]) ###angle range of joint 1 for robot to move
+    height_range=np.array([750,925]) ###height range for robot to move
     # p_start=np.array([0,-radius,700])	###initial position
     # R_start=np.array([	[0,1,0],
     #                     [0,0,-1],
@@ -84,6 +84,7 @@ R_pencil_base=ipad_pose[:3,:3]@R_pencil # pencil orientation, world frame
 q_waiting = np.radians([0,-30,25,0,40,0]) # waiting joint position
 T_waiting = robot.fwd(q_waiting) # waiting pose, world frame
 hover_height=20 # height to hover above the paper
+hover_height_close = 1.5
 face_track_speed=0.8 # speed to track face
 face_track_x = np.array([-np.sin(np.arctan2(p_tracking_start[1],p_tracking_start[0])),np.cos(np.arctan2(p_tracking_start[1],p_tracking_start[0])),0])
 face_track_y = np.array([0,0,1])
@@ -94,19 +95,19 @@ min_stroke_w = 7 # min stroke width
 pixelforce_ratio_calib = 1.2 # pixel to force ratio calibration
 ######## Controller parameters ###
 controller_params = {
-    "force_ctrl_damping": 160.0, # 200, 180, 90, 60
+    "force_ctrl_damping": 90.0, # 200, 180, 90, 60
     "force_epsilon": 0.1, # Unit: N
-    "moveL_speed_lin": 20.0, # 10 Unit: mm/sec
-    "moveL_acc_lin": 3.6, # Unit: mm/sec^2 0.6, 1.2
+    "moveL_speed_lin": 6.0, # 10 Unit: mm/sec
+    "moveL_acc_lin": 7.2, # Unit: mm/sec^2 0.6, 1.2, 3.6
     "moveL_speed_ang": np.radians(10), # Unit: rad/sec
     "trapzoid_slope": 1, # trapzoidal load profile. Unit: N/sec
-    "load_speed": 10.0, # Unit mm/sec
+    "load_speed": 15.0, # Unit mm/sec 10
     "unload_speed": 1.0, # Unit mm/sec
     'settling_time': 0.2, # Unit: sec
     "lookahead_time": 0.132, # Unit: sec, 0.02
     "jogging_speed": 200, # Unit: mm/sec
     "jogging_acc": 60, # Unit: mm/sec^2
-    'force_filter_alpha': 0.75 # force low pass filter alpha
+    'force_filter_alpha': 0.9 # force low pass filter alpha
     }
 ### Define the motion controller
 mctrl=MotionController(robot,ipad_pose,H_pentip2ati,controller_params,TIMESTEP,USE_RR_ROBOT=USE_RR_ROBOT,
@@ -137,7 +138,7 @@ PIXEL_PLAN = True
 CART_PLAN = True
 JS_PLAN = True
 
-INITIAL_LOGO_PLAN=True
+INITIAL_LOGO_PLAN=False
 
 img_names = ['alex','brandon','eric','glenn','julia','molly','thea','wen']
 img_count = 0
@@ -153,20 +154,22 @@ while True:
         origin_lookaheadt = mctrl.params['lookahead_time']
         origin_fdamp = mctrl.params['force_ctrl_damping']
         mctrl.params['lookahead_time'] = 0.04
-        mctrl.params["moveL_acc_lin"] = 0.6
-        mctrl.params['force_ctrl_damping'] = 180
+        mctrl.params["moveL_acc_lin"] = origin_acc
+        mctrl.params['force_ctrl_damping'] = origin_fdamp
         while t_robot_thinking_flag:
             ########### Logo words ###########
             ####### write words
             num_segments=len(glob.glob('path/pixel_path/'+test_logo+'/*.csv'))
             
             if INITIAL_LOGO_PLAN:
+                repeat_row = 4
+                repeat_col = 3
                 img=cv2.imread('imgs/'+test_logo+'_resized.png')
                 # replocate the image and pixel paths
-                img_new = np.ones((img.shape[0]*3,img.shape[1]*3,3))*255
+                img_new = np.ones((img.shape[0]*repeat_row,img.shape[1]*repeat_col,3))*255
                 pixel_paths=[]
-                for i in range(9):
-                    pixel_offset = np.array([(i%3)*img.shape[1],(i//3)*img.shape[0]])
+                for i in range(repeat_row*repeat_col):
+                    pixel_offset = np.array([(i%repeat_col)*img.shape[1],(i//repeat_col)*img.shape[0]])
                     img_new[pixel_offset[1]:img.shape[0]+pixel_offset[1],pixel_offset[0]:pixel_offset[0]+img.shape[1],:]=img
                     for j in range(num_segments):
                         pixel_paths.append(np.loadtxt('path/pixel_path/'+test_logo+'/%i.csv'%j,delimiter=',').reshape((-1,3)))
@@ -174,29 +177,26 @@ while True:
                 img = img_new
                 if not t_robot_thinking_flag:
                     break
-                print("PROJECTING TO IPAD")
                 _,cartesian_paths_world,force_paths=image2plane(img,ipad_pose,pixel2mm,pixel_paths,pixel2force)
                 pickle.dump(cartesian_paths_world, open(TEMP_DATA_DIR+'cartesian_paths_world_logo.pkl', 'wb'))
                 pickle.dump(force_paths, open(TEMP_DATA_DIR+'force_paths_logo.pkl', 'wb'))
                 if not t_robot_thinking_flag:
                     break
-                print("SOLVING JOINT TRAJECTORY")
                 js_paths=[]
                 for cartesian_path in cartesian_paths_world:
                     curve_js=robot.find_curve_js(cartesian_path,[R_pencil_base]*len(cartesian_path),q_seed)
                     js_paths.append(curve_js)
                 pickle.dump(js_paths, open(TEMP_DATA_DIR+'js_paths_logo.pkl', 'wb'))
             else:
+                print("Read from exsiting.")
                 cartesian_paths_world = pickle.load(open(TEMP_DATA_DIR+'cartesian_paths_world_logo.pkl', 'rb'))
                 force_paths = pickle.load(open(TEMP_DATA_DIR+'force_paths_logo.pkl', 'rb'))
                 js_paths = pickle.load(open(TEMP_DATA_DIR+'js_paths_logo.pkl', 'rb'))
             
             if not t_robot_thinking_flag:
                 break
-            print('START DRAWING LOGO')
             
             num_segments = len(js_paths)
-            print("LOGO NUM SEGMENTS: ", num_segments)
             ###Execute
             try:
                 mctrl.press_button_routine(p_button,R_pencil,h_offset=hover_height,lin_vel=controller_params['jogging_speed'], q_seed=q_seed)
@@ -218,7 +218,7 @@ while True:
                     #### motion start ###
                     if not t_robot_thinking_flag:
                         break
-                    mctrl.motion_start_routine(traj_q[0],traj_fz[0],hover_height,1.5,lin_vel=controller_params['jogging_speed'])
+                    mctrl.motion_start_routine(traj_q[0],traj_fz[0],hover_height,hover_height_close,lin_vel=controller_params['jogging_speed'])
                     if not t_robot_thinking_flag:
                         break
                     joint_force_exe, cart_force_exe = mctrl.trajectory_force_PIDcontrol(traj_xy,traj_q,traj_fz,force_lookahead=True)
@@ -269,7 +269,7 @@ while True:
             
             if wire_packet[0]:
                 bbox=wire_packet[1]
-                if len(bbox)==0 or (q_cur[0]<angle_range[0] or q_cur[0]>angle_range[1] or pose_cur.p[2]<height_range[0] or pose_cur.p[2]>height_range[1]):
+                if len(bbox)==0 or (q_cur[0]<angle_range[0] or q_cur[0]>angle_range[1]):
                     # if no face detected, or out of range
                     # jog to initial position
                     diff=q_tracking_start-q_cur
@@ -287,6 +287,10 @@ while True:
                     yd=center[1]-image_center[1]
                     xd=center[0]-image_center[0]
                     try:
+                        if pose_cur.p[2]<height_range[0]:
+                            yd = min(0,yd)
+                        elif pose_cur.p[2]>height_range[1]:
+                            yd = max(0,yd)
                         q_temp=robot_cam.inv(pose_cur.p+yd*np.array([0,0,y_gain]),pose_cur.R,q_cur)[0]
                     except:
                         continue
@@ -421,7 +425,7 @@ while True:
                 continue
             traj_q, traj_xy, traj_fz, time_bp = mctrl.trajectory_generate(js_paths[i],curve_xy,fz_des) # get trajectory and time_bp
             #### motion start ###
-            mctrl.motion_start_routine(traj_q[0],traj_fz[0],hover_height,1.5,lin_vel=controller_params['jogging_speed'])
+            mctrl.motion_start_routine(traj_q[0],traj_fz[0],hover_height,hover_height_close,lin_vel=controller_params['jogging_speed'])
             joint_force_exe, cart_force_exe = mctrl.trajectory_force_PIDcontrol(traj_xy,traj_q,traj_fz,force_lookahead=True)
             mctrl.motion_end_routine(traj_q[-1],hover_height, lin_vel=controller_params['jogging_speed'])
     except KeyboardInterrupt:
@@ -456,18 +460,18 @@ while True:
     for i in range(num_segments):
         pixel_paths.append(np.loadtxt('path/pixel_path/'+test_logo+'/%i.csv'%i,delimiter=',').reshape((-1,3)))
         pixel_paths[-1][:,:2]+=pixel_offset
-    pickle.dump(pixel_paths, open(TEMP_DATA_DIR+'pixel_paths_logo.pkl', 'wb'))
+    # pickle.dump(pixel_paths, open(TEMP_DATA_DIR+'pixel_paths_logo.pkl', 'wb'))
     
     print("PROJECTING TO IPAD")
     _,cartesian_paths_world,force_paths=image2plane(img,ipad_pose,pixel2mm,pixel_paths,pixel2force)
-    pickle.dump(cartesian_paths_world, open(TEMP_DATA_DIR+'cartesian_paths_world_logo.pkl', 'wb'))
+    # pickle.dump(cartesian_paths_world, open(TEMP_DATA_DIR+'cartesian_paths_world_logo.pkl', 'wb'))
     
     print("SOLVING JOINT TRAJECTORY")
     js_paths=[]
     for cartesian_path in cartesian_paths_world:
         curve_js=robot.find_curve_js(cartesian_path,[R_pencil_base]*len(cartesian_path),q_seed)
         js_paths.append(curve_js)
-    pickle.dump(js_paths, open(TEMP_DATA_DIR+'js_paths_logo.pkl', 'wb'))
+    # pickle.dump(js_paths, open(TEMP_DATA_DIR+'js_paths_logo.pkl', 'wb'))
     ### Execute
     execution_st = time.time()
     
@@ -477,8 +481,8 @@ while True:
     origin_lookaheadt = mctrl.params['lookahead_time']
     origin_fdamp = mctrl.params['force_ctrl_damping']
     mctrl.params['lookahead_time'] = 0.04
-    mctrl.params["moveL_acc_lin"] = 0.6
-    mctrl.params['force_ctrl_damping'] = 180
+    mctrl.params["moveL_acc_lin"] = origin_acc
+    mctrl.params['force_ctrl_damping'] = origin_fdamp
     num_segments = len(js_paths)
     print("LOGO NUM SEGMENTS: ", num_segments)
     ###Execute
@@ -496,7 +500,7 @@ while True:
             continue
         traj_q, traj_xy, traj_fz, time_bp = mctrl.trajectory_generate(js_paths[i],curve_xy,fz_des) # get trajectory and time_bp
         #### motion start ###
-        mctrl.motion_start_routine(traj_q[0],traj_fz[0],hover_height,1.5,lin_vel=controller_params['jogging_speed'])
+        mctrl.motion_start_routine(traj_q[0],traj_fz[0],hover_height,hover_height_close,lin_vel=controller_params['jogging_speed'])
         joint_force_exe, cart_force_exe = mctrl.trajectory_force_PIDcontrol(traj_xy,traj_q,traj_fz,force_lookahead=True)
         mctrl.motion_end_routine(traj_q[-1],hover_height, lin_vel=controller_params['jogging_speed'])
 
@@ -511,3 +515,4 @@ while True:
     
     
     print('TOTAL TIME: ', time.time()-img_st)
+    messagebox.showinfo('Message', 'Next Round?')

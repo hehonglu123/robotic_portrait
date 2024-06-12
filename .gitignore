@@ -401,3 +401,4 @@ imgs/**/*_name*
 record*
 ui/credentiala/*
 temp_data/*
+*.pkl
