@@ -93,53 +93,11 @@ anime = AnimeGANv3('models/AnimeGANv3_PortraitSketch.onnx')
 # print(robot.fwd(mctrl.read_position()))
 # exit()
 
-test_img_path = 'temp_data/img_julia.jpg'
+test_img_path = 'temp_data/img_alex.jpg'
 # test_img_path = 'imgs/logo.png'
 test_logo = 'logos_words'
 #########################################################EXECUTION#########################################################
 while True:
-    
-    ########### Logo words ###########
-    ####### write words
-    num_segments=len(glob.glob('path/pixel_path/'+test_logo+'/*.csv'))
-    img=cv2.imread('imgs/'+test_logo+'_resized.png')
-    # plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-    # plt.show()
-    # replocate the image
-    img_new = np.ones((img.shape[0]*3,img.shape[1]*3,3))*255
-    pixel_paths=[]
-    for i in range(9):
-        pixel_offset = np.array([(i%3)*img.shape[1],(i//3)*img.shape[0]])
-        img_new[pixel_offset[1]:img.shape[0]+pixel_offset[1],pixel_offset[0]:pixel_offset[0]+img.shape[1],:]=img
-        for j in range(num_segments):
-            pixel_paths.append(np.loadtxt('path/pixel_path/'+test_logo+'/%i.csv'%j,delimiter=',').reshape((-1,3)))
-            pixel_paths[-1][:,:2]+=pixel_offset
-    img = img_new
-    # cv2.imwrite(TEMP_DATA_DIR+'img_logo.png',img)
-    # plt.imshow(img)
-    # plt.show()
-    # relocate paths
-    
-    print("PROJECTING TO IPAD")
-    _,cartesian_paths_world,force_paths=image2plane(img,ipad_pose,pixel2mm,pixel_paths,pixel2force)
-    
-    print("SOLVING JOINT TRAJECTORY")
-    js_paths=[]
-    for cartesian_path in cartesian_paths_world:
-        curve_js=robot.find_curve_js(cartesian_path,[R_pencil]*len(cartesian_path),q_seed)
-        js_paths.append(curve_js)
-        
-    image_out = np.ones_like(img)*255
-    for stroke in pixel_paths:
-        for n in stroke:
-            image_out = cv2.circle(image_out, (int(n[0]), int(n[1])), round(n[2]), 0, -1)
-            image_out[int(n[1]),int(n[0])]=120
-            cv2.imshow("Image", image_out)
-            if cv2.waitKey(1) == ord('q'): 
-                # press q to terminate the loop 
-                cv2.destroyAllWindows() 
-                break 
-    exit()
     
     start_time=time.time()
     
@@ -159,15 +117,15 @@ while True:
 
     # print(gray_image_masked.shape)    
     # print(anime_img.shape)
-    # anime_img_viz = facer.hwc2bchw(torch.from_numpy(anime_img)).to(device='cuda') 
+    # anime_img_viz = facer.hwc2bchw(torch.from_numpy(img)).to(device='cuda') 
     # facer.show_bchw(facer.draw_bchw(anime_img_viz, faces))
-    plt.matshow(face_parse_mask)
-    plt.show()
+    # plt.matshow(face_parse_mask)
+    # plt.show()
     
     img_gray=cv2.cvtColor(anime_img, cv2.COLOR_BGR2GRAY)
 
-    # cv2.imshow('img',anime_img)
-    # cv2.waitKey(0)
+    # plt.imshow(anime_img)
+    # plt.show()
     print("IMAGE PROCESSING TIME: ", time.time()-img_st)
     ####################################################################
     
