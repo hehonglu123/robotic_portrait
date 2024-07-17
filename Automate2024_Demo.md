@@ -1,5 +1,6 @@
 # Automate 2024 Demo
 
+## Robot IP: 192.168.60.116
 ## Portrait Demo
 
 ### Launching Camera
@@ -64,8 +65,8 @@ python3 aruco_service.py
 
 3. Launch the ABB robot RR service. Open a terminal
 ```
-cd ~/Desktop/ABB
-source run_robot.sh
+    cd ~/Desktop/abb_driver_csharp-2024-01-02
+source run_driver.sh
 ```
 
 4. Launch the calibration script. Open a terminal
@@ -78,7 +79,7 @@ source calibration.sh
 
 6. Jog the robot with the gui such that the aruco tag is about in the center of field of view of the camera with not too much skew.
 
-7. Click ``Calibrate with tag`` on the panel. A pop up window will show and click ``Continue``.
+7. Click ``use aruco`` on the panel. A pop up window will show and click ``Continue``.
 
 ### Refined Calibration using Force Feedback
 
@@ -86,7 +87,7 @@ source calibration.sh
 
 2. Launch ATI ft sensor RR service. Open a terminal.
 ```
-cd ~/Desktop/ati
+cd ~/Desktop/ati_robotraconteur_driver
 source run_sensor.sh
 ```
 
