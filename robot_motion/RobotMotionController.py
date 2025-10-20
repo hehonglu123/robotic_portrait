@@ -278,6 +278,7 @@ class MotionController(object):
         self.force_load_z(-press_force,load_speed=lin_vel) # press the button
         self.jog_joint_position_cmd(q_button_offset,v=lin_vel) # move about the button
     
+    
     def trajectory_generate(self,curve_js,curve_xy,force_path,lin_vel=None,lin_acc=None):
     
         # velocity and acceleration
@@ -382,6 +383,46 @@ class MotionController(object):
         
         return np.array(traj_q), np.array(traj_xy), np.array(traj_fz), np.array(time_bp)
     
+    def trajectory_generate_interp(self,curve_js,curve_xy,force_path,lin_vel=None,lin_acc=None):
+
+        # velocity and acceleration
+        if lin_vel is None:
+            lin_vel = self.params['moveL_speed_lin']
+        if lin_acc is None:
+            lin_acc = self.params['moveL_acc_lin']
+        # Calculate the path length
+        lam = calc_lam_js(curve_js, self.robot)
+        
+        time_for_accelration = lin_vel/lin_acc
+        distance_for_accelration = 0.5*lin_acc*time_for_accelration**2
+        if lam[-1]<2*distance_for_accelration:
+            half_travel_time = np.sqrt((lam[-1])/lin_acc)
+            half_lambda = 0.5*lin_acc*(np.arange(0,half_travel_time,0.004)**2)
+            lam_stamped = np.hstack((half_lambda,lam[-1]-half_lambda[::-1]))
+        else:
+            constant_velocity_time = (lam[-1]-2*distance_for_accelration)/lin_vel
+            time_points = np.arange(0,2*time_for_accelration+constant_velocity_time,0.004)
+            lam_stamped = np.piecewise(time_points, 
+                                [time_points < time_for_accelration,
+                                    (time_points >= time_for_accelration) & (time_points <= time_for_accelration + constant_velocity_time),
+                                    time_points > time_for_accelration + constant_velocity_time],
+                                [lambda t: 0.5*lin_acc*t**2,
+                                    lambda t: distance_for_accelration + lin_vel*(t - time_for_accelration),
+                                    lambda t: lam[-1] - 0.5*lin_acc*(2*time_for_accelration + constant_velocity_time - t)**2])
+    
+        traj_j = []
+        for j in range(len(curve_js[0])):
+            traj_j.append(np.interp(lam_stamped, lam, curve_js[:,j]))
+        traj_q = np.array(traj_j).T
+        traj_xy = []
+        for i in range(len(curve_xy[0])):
+            traj_xy.append(np.interp(lam_stamped, lam, curve_xy[:,i]))
+        traj_xy = np.array(traj_xy).T
+        traj_fz = np.interp(lam_stamped, lam, force_path)
+
+        return np.array(traj_q), np.array(traj_xy), np.array(traj_fz), None
+
+
     def trajectory_force_PIDcontrol(self,traj_xy,traj_js,traj_fz,force_lookahead=False):
         
         assert len(traj_xy)==len(traj_fz), "trajectory length mismatch"
